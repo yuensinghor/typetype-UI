@@ -68,3 +68,11 @@ export interface Identity {
   inviteCode?: string; // this player's own shareable invite code
   invitedBy?: string | null; // userId of whoever invited this player
 }
+
+export interface RankOvertake {
+  id: number;
+  overtakenByUserId: string;
+  overtakenByUsername: string;
+  seen: boolean;
+  createdAt: string;
+}

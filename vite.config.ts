@@ -8,11 +8,14 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'Digit Dash',
-        short_name: 'DigitDash',
-        description: 'Speed decoding & arithmetic tournament',
-        theme_color: '#050508',
-        background_color: '#050508',
+        name: 'TypeType',
+        short_name: 'TypeType',
+        description: 'Type the equation back exactly, as fast as you can. Climb the ladder from Easy to Boss.',
+        // Warm cream/coral theme (matches src/lib/theme.ts) — replaces the
+        // old dark "Digit Dash" splash colors so the install/boot experience
+        // matches the redesigned in-game look instead of flashing near-black.
+        theme_color: '#FF6B6B',
+        background_color: '#FFF8F0',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

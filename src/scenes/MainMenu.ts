@@ -5,6 +5,7 @@ import { AudioManager } from '../lib/audio';
 import { buildInviteLink } from '../lib/identity';
 import { theme, panel, label, logoTitle } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
+import { renderInstallButton } from '../lib/installUI';
 import { TIER_ORDER, type LadderEntry, type SquadEntry, type Tier } from '../shared/types';
 
 const TIER_LABELS: Record<Tier, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', boss: 'Boss' };
@@ -106,6 +107,16 @@ export class MainMenu extends Phaser.Scene {
         Invite friends
       </button>
     `;
+
+    // Self-checks whether install is actually offerable right now (not
+    // already installed, platform supports either the native prompt or
+    // iOS's manual path) — no-ops and adds nothing to the DOM otherwise.
+    renderInstallButton(this.containerEl, {
+      id: 'btn-install-app',
+      label: '📲 Install App',
+      variant: 'secondary',
+      extra: 'margin-top:-4px;',
+    });
 
     this.bindEvents();
     this.refreshLeaderboard();

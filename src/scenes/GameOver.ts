@@ -8,6 +8,8 @@ import type { ClearedTierSnapshot } from '../lib/ladderEngine';
 import { theme, panel, label, primaryButton, secondaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { renderShareCard, shareOrDownload, type ShareCardData } from '../lib/shareCard';
+import { renderInstallButton } from '../lib/installUI';
+import { canOfferInstall, hasSeenInstallPrompt, markInstallPromptSeen } from '../lib/installPrompt';
 import type { LadderEntry, Tier } from '../shared/types';
 import { TIER_ORDER } from '../shared/types';
 
@@ -67,6 +69,7 @@ export class GameOver extends Phaser.Scene {
     }
 
     this.persistUnlockProgress();
+    this.maybeOfferInstallOnFirstPlay();
   }
 
   shutdown() {
@@ -100,6 +103,68 @@ export class GameOver extends Phaser.Scene {
       highestUnlockedTier: newHighest,
       badges: mergedBadges,
       hasLimitBreakAward: mergedAward,
+    });
+  }
+
+  // ── Install prompt: first-ever completed run only ──────────────────────
+
+  /**
+   * Shown at most once per player, ever — win or lose, whichever run
+   * happens to be their first. Not tied to clearing a tier: the moment
+   * someone finishes their very first full run (5 rounds) is when they've
+   * seen enough of the game to judge whether they want it installed, and
+   * we don't want to nag them again on every future GameOver screen.
+   */
+  private maybeOfferInstallOnFirstPlay() {
+    if (hasSeenInstallPrompt()) return;
+    markInstallPromptSeen();
+    if (!canOfferInstall()) return;
+
+    // Small delay so it doesn't collide with the victory sound/entrance
+    // animation — let the player register their result first.
+    this.time.delayedCall(700, () => this.showFirstPlayInstallModal());
+  }
+
+  private showFirstPlayInstallModal() {
+    const c = theme.color;
+    const overlay = document.createElement('div');
+    overlay.id = 'first-play-install-overlay';
+    overlay.style.cssText = `
+      position:fixed;inset:0;z-index:1500;background:rgba(45,52,54,0.55);backdrop-filter:blur(4px);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;
+      font-family:${theme.font.body};animation:fadeIn 0.15s;
+    `;
+
+    overlay.innerHTML = `
+      <div style="width:100%;max-width:320px;${panel('padding:24px 20px;')}display:flex;flex-direction:column;
+        align-items:center;gap:14px;text-align:center;animation:popIn 0.18s;">
+        <div style="font-family:${theme.font.display};font-size:17px;font-weight:800;color:${c.textPrimary};">
+          Enjoying TypeType?
+        </div>
+        <p style="font-size:12.5px;color:${c.textSecondary};line-height:1.8;margin:0;">
+          Install it on your home screen for one-tap access next time — no app store, no download size.
+        </p>
+        <div id="install-btn-slot" style="width:100%;"></div>
+        <button id="btn-install-later" style="background:none;border:none;color:${c.textMuted};
+          font-family:${theme.font.body};font-size:12px;font-weight:600;cursor:pointer;padding:4px;">
+          Maybe later
+        </button>
+      </div>
+    `;
+
+    this.containerEl.appendChild(overlay);
+
+    const slot = overlay.querySelector('#install-btn-slot') as HTMLElement;
+    renderInstallButton(slot, {
+      id: 'btn-first-play-install',
+      label: '📲 Install App',
+      variant: 'primary',
+      onHandled: () => overlay.remove(),
+    });
+
+    overlay.querySelector('#btn-install-later')?.addEventListener('click', () => {
+      this.audio.playClick();
+      overlay.remove();
     });
   }
 
