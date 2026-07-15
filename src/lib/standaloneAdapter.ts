@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { lsKey, type PlatformAdapter } from './platformAdapter';
-import type { LadderEntry, SquadEntry, TierRunMeta, Tier, ChallengerSnapshot } from '../shared/types';
+import type { LadderEntry, SquadEntry, TierRunMeta, Tier, ChallengerSnapshot, RankOvertake } from '../shared/types';
 
 const FREE_QUITS_ALLOWANCE = 3;
 
@@ -200,6 +200,46 @@ async fetchChallengerByInviteCode(inviteCode: string): Promise<ChallengerSnapsho
     } catch (err) {
       console.error('[DigitDash] fetchChallengerByInviteCode threw', err);
       return null;
+    }
+  }
+
+  // ── Rank overtake notifications ────────────────────────────────────────
+  async fetchUnseenOvertakes(userId: string): Promise<RankOvertake[]> {
+    try {
+      const { data, error } = await supabase
+        .from('rank_overtakes')
+        .select('*')
+        .eq('overtaken_user_id', userId)
+        .eq('seen', false)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('[DigitDash] fetchUnseenOvertakes error', error);
+        return [];
+      }
+
+      return (data ?? []).map(r => ({
+        id: r.id,
+        overtakenByUserId: r.overtaken_by_user_id,
+        overtakenByUsername: r.overtaken_by_username,
+        seen: r.seen,
+        createdAt: r.created_at,
+      }));
+    } catch (err) {
+      console.error('[DigitDash] fetchUnseenOvertakes threw', err);
+      return [];
+    }
+  }
+
+  async markOvertakesSeen(userId: string): Promise<void> {
+    try {
+      await supabase
+        .from('rank_overtakes')
+        .update({ seen: true })
+        .eq('overtaken_user_id', userId)
+        .eq('seen', false);
+    } catch (err) {
+      console.error('[DigitDash] markOvertakesSeen threw', err);
     }
   }
 

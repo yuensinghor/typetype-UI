@@ -6,7 +6,7 @@ import { buildInviteLink } from '../lib/identity';
 import { theme, panel, label, logoTitle } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { renderInstallButton } from '../lib/installUI';
-import { TIER_ORDER, type LadderEntry, type SquadEntry, type Tier } from '../shared/types';
+import { TIER_ORDER, type LadderEntry, type SquadEntry, type Tier, type RankOvertake } from '../shared/types';
 
 const TIER_LABELS: Record<Tier, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', boss: 'Boss' };
 const TIER_NUMBER: Record<Tier, number> = { easy: 1, medium: 2, hard: 3, boss: 4 };
@@ -184,12 +184,24 @@ export class MainMenu extends Phaser.Scene {
     const username = identity?.username ?? '';
 
     let entries: LadderEntry[] | SquadEntry[] = [];
+    let overtookMeUserIds = new Set<string>();
     try {
       entries = this.activeTab === 'global'
         ? await platform.fetchLadder()
         : identity
         ? await platform.fetchSquad(identity.userId, identity.invitedBy)
         : [];
+
+      // Friends tab only: flag any squadmate who recently passed this
+      // player on the ladder so their row shows a "passed you" badge,
+      // then mark those overtakes seen so the badge doesn't repeat next visit.
+      if (this.activeTab === 'friends' && identity) {
+        const overtakes: RankOvertake[] = await platform.fetchUnseenOvertakes(identity.userId);
+        if (overtakes.length > 0) {
+          overtookMeUserIds = new Set(overtakes.map(o => o.overtakenByUserId));
+          platform.markOvertakesSeen(identity.userId).catch(() => {});
+        }
+      }
     } catch (err) {
       console.error('[DigitDash] leaderboard fetch failed', err);
       if (lbCard) {
@@ -216,7 +228,7 @@ export class MainMenu extends Phaser.Scene {
     lbCard.style.justifyContent = 'flex-start';
     lbCard.innerHTML = `
       <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
-        ${entries.map((e, i) => lbRow(e, i, username)).join('')}
+        ${entries.map((e, i) => lbRow(e, i, username, overtookMeUserIds)).join('')}
       </div>`;
   }
 }
@@ -260,9 +272,10 @@ function spinner(msg = 'Loading…') {
     </div>`;
 }
 
-function lbRow(e: LadderEntry, i: number, myUsername: string) {
+function lbRow(e: LadderEntry, i: number, myUsername: string, overtookMeUserIds?: Set<string>) {
   const c = theme.color;
   const isMe = e.username.toLowerCase() === myUsername.toLowerCase();
+  const justPassedMe = !!overtookMeUserIds?.has(e.userId);
   const rankColor = i === 0 ? theme.palette.yellow : i === 1 ? c.textSecondary : i === 2 ? theme.palette.orange : c.textMuted;
 
   let badgeHtml = '';
@@ -274,19 +287,22 @@ function lbRow(e: LadderEntry, i: number, myUsername: string) {
   }
 
   return `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:10px;font-size:12px;
-      background:${isMe ? theme.color.accentDim : 'transparent'};">
-      <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
-        <span style="font-weight:700;color:${rankColor};width:20px;flex-shrink:0;">#${i + 1}</span>
-        <div style="display:flex;align-items:center;gap:3px;min-width:0;overflow:hidden;">
-          ${badgeHtml}
-          <span style="font-weight:700;color:${e.hasLimitBreakAward ? c.success : c.textPrimary};
-            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.username}</span>
+    <div style="display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:10px;font-size:12px;
+      background:${isMe ? theme.color.accentDim : justPassedMe ? theme.palette.coral + '1a' : 'transparent'};">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
+          <span style="font-weight:700;color:${rankColor};width:20px;flex-shrink:0;">#${i + 1}</span>
+          <div style="display:flex;align-items:center;gap:3px;min-width:0;overflow:hidden;">
+            ${badgeHtml}
+            <span style="font-weight:700;color:${e.hasLimitBreakAward ? c.success : c.textPrimary};
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.username}</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <span style="font-size:10px;color:${c.textMuted};font-weight:700;">${TIER_LABELS[e.highestTier]}</span>
+          <span style="color:${c.textPrimary};font-weight:700;font-family:${theme.font.mono};">${(e.bestTotalTimeMs / 1000).toFixed(3)}s</span>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-        <span style="font-size:10px;color:${c.textMuted};font-weight:700;">${TIER_LABELS[e.highestTier]}</span>
-        <span style="color:${c.textPrimary};font-weight:700;font-family:${theme.font.mono};">${(e.bestTotalTimeMs / 1000).toFixed(3)}s</span>
-      </div>
+      ${justPassedMe ? `<span style="font-size:10px;font-weight:700;color:${theme.palette.coral};padding-left:29px;">🔥 ${e.username} passed you!</span>` : ''}
     </div>`;
 }

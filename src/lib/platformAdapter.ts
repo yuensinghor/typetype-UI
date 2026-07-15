@@ -1,4 +1,4 @@
-import type { LadderEntry, SquadEntry, TierRunMeta, ChallengerSnapshot } from '../shared/types';
+import type { LadderEntry, SquadEntry, TierRunMeta, ChallengerSnapshot, RankOvertake } from '../shared/types';
 
 /**
  * Everything that differs between "standalone site" and "portal build"
@@ -23,6 +23,10 @@ export interface PlatformAdapter {
   submitTierRun(meta: TierRunMeta): Promise<LadderEntry[]>;
   /** Look up a challenger by their invite code, for the Challenge Flow landing screen. */
   fetchChallengerByInviteCode(inviteCode: string): Promise<ChallengerSnapshot | null>;
+
+  // ── Rank overtake notifications ────────────────────────────────────────
+  fetchUnseenOvertakes(userId: string): Promise<RankOvertake[]>;
+  markOvertakesSeen(userId: string): Promise<void>;
 
   // ── Save data ────────────────────────────────────────────────────────
   saveProgress(userId: string, key: string, value: unknown): Promise<void>;
