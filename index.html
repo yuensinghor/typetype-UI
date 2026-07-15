@@ -2,6 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- Google AdSense: site verification + ad serving -->
+  <!-- data-adbreak-test="on" shows placeholder TEST ads instead of real ones —
+       remove this attribute once H5 Games Ads is approved and you're ready to go live. -->
+ <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3479058134966847" crossorigin="anonymous"></script>
+  <!-- Ad Placement API shim: required so adBreak()/adConfig() calls queue correctly
+       before the AdSense script above finishes loading. Must stay a plain inline
+       script (not a TS module) since it defines window-level globals the API expects. -->
+  <script>
+    window.adsbygoogle = window.adsbygoogle || [];
+    window.adBreak = window.adConfig = function (o) { window.adsbygoogle.push(o); };
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#FF6B6B" />
   <title>TypeType — Type the Equation, Beat the Clock</title>
@@ -64,11 +75,6 @@
       * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
     }
   </style>
-
-  <!-- Google AdSense Verification Code -->
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3479058134966847"
-     crossorigin="anonymous"></script>
-
 </head>
 <body>
   <div id="game-container"></div>

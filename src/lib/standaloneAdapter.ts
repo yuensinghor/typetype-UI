@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { lsKey, type PlatformAdapter } from './platformAdapter';
 import type { LadderEntry, SquadEntry, TierRunMeta, Tier, ChallengerSnapshot, RankOvertake } from '../shared/types';
+import { requestRewardedAd } from './googleAds';
 
 const FREE_QUITS_ALLOWANCE = 3;
 
@@ -9,10 +10,7 @@ export class StandaloneAdapter implements PlatformAdapter {
 
   // ── Ads ──────────────────────────────────────────────────────────────
   async showRewardedAd(): Promise<boolean> {
-    return new Promise(resolve => {
-      console.info('[DigitDash] Showing rewarded ad (stub)…');
-      setTimeout(() => resolve(true), 800);
-    });
+    return requestRewardedAd();
   }
 
   async showInterstitialAd(): Promise<void> {}
