@@ -7,13 +7,12 @@ import { theme, panel, label, logoTitle } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { renderInstallButton } from '../lib/installUI';
 import { TIER_ORDER, type LadderEntry, type SquadEntry, type Tier, type RankOvertake } from '../shared/types';
+import { canAccessMode, type GameMode, type AuthState, type AccessResult, type PlayerUnlocks } from '../lib/modeAccess';
+import { fetchPlayerUnlocks } from '../lib/playerUnlocks';
 
 const TIER_LABELS: Record<Tier, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', boss: 'Boss' };
 const TIER_NUMBER: Record<Tier, number> = { easy: 1, medium: 2, hard: 3, boss: 4 };
 
-// Difficulty escalates cool -> warm through the palette: mint (calm) up to
-// coral (urgent) for Boss, so the tier grid reads as a difficulty ramp at a
-// glance, not just four identically-styled cards.
 const TIER_COLORS: Record<Tier, string> = {
   easy: theme.palette.mint,
   medium: theme.palette.yellow,
@@ -21,11 +20,6 @@ const TIER_COLORS: Record<Tier, string> = {
   boss: theme.palette.coral,
 };
 
-// Same difficulty-color ramp, but for small TEXT usage (the "Level X"
-// label). Pale yellow fails contrast as text on a light card, so Medium
-// gets the readable warningText amber here instead — TIER_COLORS above is
-// still used as-is for the card's border/glow, where contrast isn't a
-// factor since it's decorative, not text.
 const TIER_LABEL_TEXT_COLORS: Record<Tier, string> = {
   easy: theme.palette.mint,
   medium: theme.color.warningText,
@@ -33,12 +27,24 @@ const TIER_LABEL_TEXT_COLORS: Record<Tier, string> = {
   boss: theme.palette.coral,
 };
 
-type LbTab = 'global' | 'friends';
+// Progressive-reveal mode slots. Order matches the intended unlock chain
+// (Daily Challenge -> Endless -> Levels). Battle Pass is deliberately
+// excluded — it's always-on once logged in, not a teased/locked mode.
+const REVEAL_MODES: { mode: GameMode; title: string; teaser: string }[] = [
+  { mode: 'daily_challenge', title: 'Daily Challenge', teaser: 'A new puzzle every day. Global leaderboard.' },
+  { mode: 'endless', title: 'Endless Mode', teaser: 'One mistake ends it. How far can you get?' },
+  { mode: 'levels', title: 'Levels', teaser: 'Bite-sized stages. Collect stars.' },
+];
+
+const DEFAULT_UNLOCKS: PlayerUnlocks = {
+  clearedEasyTier: false,
+  distinctDaysPlayedDaily: 0,
+  endlessRunsCompleted: 0,
+};
 
 export class MainMenu extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
   private audio = new AudioManager();
-  private activeTab: LbTab = 'global';
 
   constructor() {
     super('MainMenu');
@@ -90,10 +96,16 @@ export class MainMenu extends Phaser.Scene {
         </div>
       </div>
 
+      <div>
+        ${label('More ways to play', c.textSecondary)}
+        <div id="modes-card" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          ${spinner()}
+        </div>
+      </div>
+
       <div style="display:flex;flex-direction:column;flex:1;min-height:220px;">
-        <div style="display:flex;gap:8px;margin-bottom:8px;">
-          <button id="tab-global" style="${tabStyle(this.activeTab === 'global')}">Leaderboard</button>
-          <button id="tab-friends" style="${tabStyle(this.activeTab === 'friends')}">Friends</button>
+        <div style="margin-bottom:8px;">
+          ${label('Friends', c.textSecondary)}
         </div>
         <div id="lb-card" style="${panel('padding:10px;')}flex:1;min-height:160px;overflow-y:auto;
           display:flex;flex-direction:column;justify-content:center;align-items:center;">
@@ -108,9 +120,6 @@ export class MainMenu extends Phaser.Scene {
       </button>
     `;
 
-    // Self-checks whether install is actually offerable right now (not
-    // already installed, platform supports either the native prompt or
-    // iOS's manual path) — no-ops and adds nothing to the DOM otherwise.
     renderInstallButton(this.containerEl, {
       id: 'btn-install-app',
       label: '📲 Install App',
@@ -119,26 +128,11 @@ export class MainMenu extends Phaser.Scene {
     });
 
     this.bindEvents();
+    this.refreshModes();
     this.refreshLeaderboard();
   }
 
   private bindEvents() {
-    this.containerEl.querySelector('#tab-global')?.addEventListener('click', () => {
-      if (this.activeTab === 'global') return;
-      this.audio.playClick();
-      this.activeTab = 'global';
-      this.refreshTabs();
-      this.refreshLeaderboard();
-    });
-
-    this.containerEl.querySelector('#tab-friends')?.addEventListener('click', () => {
-      if (this.activeTab === 'friends') return;
-      this.audio.playClick();
-      this.activeTab = 'friends';
-      this.refreshTabs();
-      this.refreshLeaderboard();
-    });
-
     this.containerEl.querySelectorAll('.dd-level-card').forEach(cardEl => {
       cardEl.addEventListener('click', () => {
         const el = cardEl as HTMLElement;
@@ -166,11 +160,34 @@ export class MainMenu extends Phaser.Scene {
     });
   }
 
-  private refreshTabs() {
-    const g = this.containerEl.querySelector('#tab-global') as HTMLButtonElement;
-    const f = this.containerEl.querySelector('#tab-friends') as HTMLButtonElement;
-    if (g) g.style.cssText = tabStyle(this.activeTab === 'global');
-    if (f) f.style.cssText = tabStyle(this.activeTab === 'friends');
+  // Progressive-reveal shell: fetches this player's unlock state (if logged
+  // in) and renders each future mode as either a locked teaser or a
+  // "log in to unlock" prompt for guests. None of these modes exist yet
+  // (Phase 1/3/4), so canAccessMode currently reports them all as
+  // not-yet-available — this scaffolding just means later phases only
+  // need to ship the mode itself, not new home-screen logic.
+  private async refreshModes() {
+    const modesCard = this.containerEl?.querySelector('#modes-card') as HTMLElement;
+    if (!modesCard) return;
+
+    const identity = getIdentity();
+    const isLoggedIn = !!identity && !identity.isGuest;
+
+    let unlocks: PlayerUnlocks = DEFAULT_UNLOCKS;
+    if (isLoggedIn && identity) {
+      try {
+        unlocks = await fetchPlayerUnlocks(identity.userId);
+      } catch (err) {
+        console.error('[TypeType] fetchPlayerUnlocks failed, defaulting to locked', err);
+      }
+    }
+
+    const auth: AuthState = { isLoggedIn, unlocks };
+
+    modesCard.innerHTML = REVEAL_MODES.map(({ mode, title, teaser }) => {
+      const access = canAccessMode(mode, auth);
+      return modeSlot(title, teaser, access);
+    }).join('');
   }
 
   private async refreshLeaderboard() {
@@ -186,16 +203,9 @@ export class MainMenu extends Phaser.Scene {
     let entries: LadderEntry[] | SquadEntry[] = [];
     let overtookMeUserIds = new Set<string>();
     try {
-      entries = this.activeTab === 'global'
-        ? await platform.fetchLadder()
-        : identity
-        ? await platform.fetchSquad(identity.userId, identity.invitedBy)
-        : [];
+      entries = identity ? await platform.fetchSquad(identity.userId, identity.invitedBy) : [];
 
-      // Friends tab only: flag any squadmate who recently passed this
-      // player on the ladder so their row shows a "passed you" badge,
-      // then mark those overtakes seen so the badge doesn't repeat next visit.
-      if (this.activeTab === 'friends' && identity) {
+      if (identity) {
         const overtakes: RankOvertake[] = await platform.fetchUnseenOvertakes(identity.userId);
         if (overtakes.length > 0) {
           overtookMeUserIds = new Set(overtakes.map(o => o.overtakenByUserId));
@@ -218,9 +228,7 @@ export class MainMenu extends Phaser.Scene {
       lbCard.style.justifyContent = 'center';
       lbCard.innerHTML = `
         <div style="color:${theme.color.textMuted};font-size:12px;text-align:center;padding:20px;">
-          ${this.activeTab === 'friends'
-            ? 'No friends yet — invite someone to see them here.'
-            : 'No scores yet. Be the first to clear a level!'}
+          No friends yet — invite someone to see them here.
         </div>`;
       return;
     }
@@ -234,13 +242,6 @@ export class MainMenu extends Phaser.Scene {
 }
 
 // ─── Style helpers ────────────────────────────────────────────────────────
-
-function tabStyle(active: boolean) {
-  return `flex:1;padding:10px 0;border-radius:10px;border:1px solid ${active ? theme.color.accent : theme.color.border};
-          font-size:12.5px;font-weight:700;cursor:pointer;font-family:${theme.font.body};
-          background:${active ? theme.color.accentDim : theme.color.bgCard};
-          color:${active ? theme.color.accent : theme.color.textMuted};transition:all 0.15s;`;
-}
 
 function levelCard(t: Tier, highest: Tier, hasBadge: boolean) {
   const unlocked = TIER_ORDER.indexOf(t) <= TIER_ORDER.indexOf(highest);
@@ -260,6 +261,36 @@ function levelCard(t: Tier, highest: Tier, hasBadge: boolean) {
       <span style="font-size:10px;color:${unlocked ? c.success : c.textMuted};font-weight:600;">
         ${!unlocked ? '🔒 Locked' : hasBadge ? '🏅 Bonus cleared' : isCurrent ? 'Current' : 'Cleared'}
       </span>
+    </div>`;
+}
+
+// Renders one locked/teased slot in the "More ways to play" progressive-reveal
+// section. Deliberately non-interactive for now — none of these modes exist
+// to navigate to yet. Later phases just need to (a) remove the mode from
+// modeAccess.ts's NOT_YET_BUILT list and (b) add a click handler here that
+// starts the real scene once canAccessMode reports allowed:true.
+function modeSlot(title: string, teaser: string, access: AccessResult) {
+  const c = theme.color;
+
+  let statusHtml = '';
+  if (access.reason === 'guest_not_allowed') {
+    statusHtml = `<span style="font-size:10px;font-weight:700;color:${c.textMuted};">🔒 Log in to unlock</span>`;
+  } else if (access.reason === 'not_yet_available') {
+    statusHtml = `<span style="font-size:10px;font-weight:700;color:${c.textMuted};">🔒 Coming soon</span>`;
+  } else if (access.progress) {
+    const { current, required } = access.progress;
+    statusHtml = `<span style="font-size:10px;font-weight:700;color:${c.textMuted};">🔒 ${current}/${required}</span>`;
+  } else {
+    statusHtml = `<span style="font-size:10px;font-weight:700;color:${c.textMuted};">🔒 Locked</span>`;
+  }
+
+  return `
+    <div style="${panel('padding:12px 14px;opacity:0.6;')}display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+        <span style="font-family:${theme.font.display};font-size:14px;font-weight:700;color:${c.textPrimary};">${title}</span>
+        <span style="font-size:11px;color:${c.textMuted};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${teaser}</span>
+      </div>
+      ${statusHtml}
     </div>`;
 }
 
