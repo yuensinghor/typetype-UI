@@ -7,6 +7,7 @@ import { ChallengeResult } from './scenes/ChallengeResult';
 import { MainMenu } from './scenes/MainMenu';
 import { Game } from './scenes/Game';
 import { GameOver } from './scenes/GameOver';
+import { DailyChallenge } from './scenes/DailyChallenge';
 import type { Identity } from './shared/types';
 
 export const config: Phaser.Types.Core.GameConfig = {
@@ -17,7 +18,7 @@ export const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [Boot, Preloader, ChallengeLanding, ChallengeTestRound, ChallengeResult, MainMenu, Game, GameOver],
+  scene: [Boot, Preloader, ChallengeLanding, ChallengeTestRound, ChallengeResult, MainMenu, Game, GameOver, DailyChallenge],
 };
 
 export const phaserGame = new Phaser.Game(config);

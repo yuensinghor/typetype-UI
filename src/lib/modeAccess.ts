@@ -36,7 +36,8 @@ export interface AccessResult {
 
 // Modes not built yet. Update this as each phase ships so the gate
 // automatically stops reporting "not_yet_available" once the mode is real.
-const NOT_YET_BUILT: GameMode[] = ['daily_challenge', 'endless', 'levels', 'battle_pass'];
+// Phase 1 shipped Daily Challenge — removed from this list.
+const NOT_YET_BUILT: GameMode[] = ['endless', 'levels', 'battle_pass'];
 
 export function canAccessMode(mode: GameMode, auth: AuthState): AccessResult {
   // Challenge Categories: always open, guest or logged in.

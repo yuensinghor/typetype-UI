@@ -186,8 +186,19 @@ export class MainMenu extends Phaser.Scene {
 
     modesCard.innerHTML = REVEAL_MODES.map(({ mode, title, teaser }) => {
       const access = canAccessMode(mode, auth);
-      return modeSlot(title, teaser, access);
+      return modeSlot(mode, title, teaser, access);
     }).join('');
+
+    modesCard.querySelectorAll<HTMLElement>('[data-playable="1"]').forEach(el => {
+      el.addEventListener('click', () => {
+        const mode = el.dataset.mode as GameMode;
+        if (mode === 'daily_challenge') {
+          this.scene.start('DailyChallenge');
+        }
+        // Other modes (endless, levels) get their own branch here once
+        // their scenes ship in later phases — same pattern, new case.
+      });
+    });
   }
 
   private async refreshLeaderboard() {
@@ -269,8 +280,21 @@ function levelCard(t: Tier, highest: Tier, hasBadge: boolean) {
 // to navigate to yet. Later phases just need to (a) remove the mode from
 // modeAccess.ts's NOT_YET_BUILT list and (b) add a click handler here that
 // starts the real scene once canAccessMode reports allowed:true.
-function modeSlot(title: string, teaser: string, access: AccessResult) {
+function modeSlot(mode: GameMode, title: string, teaser: string, access: AccessResult) {
   const c = theme.color;
+
+  if (access.allowed) {
+    return `
+      <div class="dd-mode-slot" data-mode="${mode}" data-playable="1" style="
+        ${panel('padding:12px 14px;cursor:pointer;')}display:flex;align-items:center;justify-content:space-between;gap:10px;
+        border-color:${c.accent};">
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+          <span style="font-family:${theme.font.display};font-size:14px;font-weight:700;color:${c.textPrimary};">${title}</span>
+          <span style="font-size:11px;color:${c.textMuted};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${teaser}</span>
+        </div>
+        <span style="font-size:10px;font-weight:700;color:${c.accent};">▶ Play</span>
+      </div>`;
+  }
 
   let statusHtml = '';
   if (access.reason === 'guest_not_allowed') {

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#FF6B6B" />
+  <title>TypeType — Type the Equation, Beat the Clock</title>
+  <meta name="description" content="Race the clock across four gates — Easy, Medium, Hard, Boss — typing equations back exactly before time runs out. Climb the ladder, chase the benchmark, unlock hidden stages." />
+  <meta property="og:title" content="TypeType — Type the Equation, Beat the Clock" />
+  <meta property="og:description" content="Race the clock across four gates — Easy, Medium, Hard, Boss — typing equations back exactly before time runs out. Can you clear the board?" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/icons/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="TypeType — Type the Equation, Beat the Clock" />
+  <meta name="twitter:description" content="Race the clock across four gates before time runs out. Can you clear the board?" />
+  <meta name="twitter:image" content="/icons/icon-512.png" />
+
+  <!-- Android/Chrome: drives the beforeinstallprompt install banner + splash screen -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+
+  <!-- iOS Safari: none of these are read from manifest.webmanifest — Apple
+       requires its own separate meta tags, or "Add to Home Screen" falls
+       back to a screenshot icon and the full page <title> as the label. -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="TypeType" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      /* Cream, matching theme.ts bg — avoids a dark flash before the game boots */
+      background: #FFF8F0; overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #game-container {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      max-width: 100vw; max-height: 100vh;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+    @keyframes flapDown {
+      0% { transform: rotateX(0deg); }
+      100% { transform: rotateX(-90deg); }
+    }
+    @keyframes flapUp {
+      0% { transform: rotateX(90deg); }
+      100% { transform: rotateX(0deg); }
+    }
+    @keyframes stampIn {
+      0% { transform: scale(2.2) rotate(-8deg); opacity: 0; }
+      60% { transform: scale(0.94) rotate(-8deg); opacity: 1; }
+      100% { transform: scale(1) rotate(-8deg); opacity: 1; }
+    }
+    @keyframes runwayPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+    }
+  </style>
+  <script type="module" crossorigin src="./assets/index-Cahn9Z-u.js"></script>
+<link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
+<body>
+  <div id="game-container"></div>
+</body>
+</html>
