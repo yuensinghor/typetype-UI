@@ -1,39 +1,20 @@
 import Phaser from 'phaser';
 import { phaserGame, getIdentity } from '../game';
-import { platform } from '../lib/standaloneAdapter';
 import { AudioManager } from '../lib/audio';
-import { buildInviteLink } from '../lib/identity';
 import { theme, panel, label, logoTitle } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { renderInstallButton } from '../lib/installUI';
-import { TIER_ORDER, type LadderEntry, type SquadEntry, type Tier, type RankOvertake } from '../shared/types';
 import { canAccessMode, type GameMode, type AuthState, type AccessResult, type PlayerUnlocks } from '../lib/modeAccess';
 import { fetchPlayerUnlocks } from '../lib/playerUnlocks';
 
-const TIER_LABELS: Record<Tier, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', boss: 'Boss' };
-const TIER_NUMBER: Record<Tier, number> = { easy: 1, medium: 2, hard: 3, boss: 4 };
-
-const TIER_COLORS: Record<Tier, string> = {
-  easy: theme.palette.mint,
-  medium: theme.palette.yellow,
-  hard: theme.palette.orange,
-  boss: theme.palette.coral,
-};
-
-const TIER_LABEL_TEXT_COLORS: Record<Tier, string> = {
-  easy: theme.palette.mint,
-  medium: theme.color.warningText,
-  hard: theme.palette.orange,
-  boss: theme.palette.coral,
-};
-
-// Progressive-reveal mode slots. Order matches the intended unlock chain
-// (Daily Challenge -> Endless -> Levels). Battle Pass is deliberately
-// excluded — it's always-on once logged in, not a teased/locked mode.
-const REVEAL_MODES: { mode: GameMode; title: string; teaser: string }[] = [
-  { mode: 'daily_challenge', title: 'Daily Challenge', teaser: 'A new puzzle every day. Global leaderboard.' },
-  { mode: 'endless', title: 'Endless Mode', teaser: 'One mistake ends it. How far can you get?' },
-  { mode: 'levels', title: 'Levels', teaser: 'Bite-sized stages. Collect stars.' },
+// Hub nav — one card per top-level system. 'challenge_categories' is always
+// open (existing ladder + friends funnel); the rest reuse the same
+// canAccessMode gating that used to live inline in this scene.
+const NAV_MODES: { mode: GameMode; title: string; teaser: string; scene: string }[] = [
+  { mode: 'challenge_categories', title: 'Challenge Categories', teaser: 'Climb the ladder. Compare with friends.', scene: 'ChallengeCategories' },
+  { mode: 'daily_challenge', title: 'Daily Challenge', teaser: 'A new puzzle every day. Global leaderboard.', scene: 'DailyChallenge' },
+  { mode: 'endless', title: 'Endless Mode', teaser: 'One mistake ends it. How far can you get?', scene: 'EndlessMode' },
+  { mode: 'levels', title: 'Levels', teaser: 'Bite-sized stages. Collect stars.', scene: 'Levels' },
 ];
 
 const DEFAULT_UNLOCKS: PlayerUnlocks = {
@@ -63,8 +44,6 @@ export class MainMenu extends Phaser.Scene {
     const c = theme.color;
     const identity = getIdentity();
     const username = identity?.username ?? 'Loading…';
-    const highestTier: Tier = phaserGame.registry.get('highestUnlockedTier') ?? 'easy';
-    const badges: Partial<Record<Tier, boolean>> = phaserGame.registry.get('tierBadges') ?? {};
     const hasLimitBreakAward: boolean = phaserGame.registry.get('hasLimitBreakAward') ?? false;
 
     const shell = document.createElement('div');
@@ -90,34 +69,11 @@ export class MainMenu extends Phaser.Scene {
       </div>
 
       <div>
-        ${label('Choose a level', c.textSecondary)}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
-          ${TIER_ORDER.map(t => levelCard(t, highestTier, !!badges[t])).join('')}
-        </div>
-      </div>
-
-      <div>
-        ${label('More ways to play', c.textSecondary)}
-        <div id="modes-card" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+        ${label('Play', c.textSecondary)}
+        <div id="nav-card" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
           ${spinner()}
         </div>
       </div>
-
-      <div style="display:flex;flex-direction:column;flex:1;min-height:220px;">
-        <div style="margin-bottom:8px;">
-          ${label('Friends', c.textSecondary)}
-        </div>
-        <div id="lb-card" style="${panel('padding:10px;')}flex:1;min-height:160px;overflow-y:auto;
-          display:flex;flex-direction:column;justify-content:center;align-items:center;">
-          ${spinner()}
-        </div>
-      </div>
-
-      <button id="btn-invite" style="
-        width:100%;padding:12px 0;background:transparent;border:1px dashed ${c.borderStrong};border-radius:12px;
-        color:${c.textSecondary};font-family:${theme.font.body};font-weight:600;font-size:12.5px;cursor:pointer;">
-        Invite friends
-      </button>
     `;
 
     renderInstallButton(this.containerEl, {
@@ -127,48 +83,16 @@ export class MainMenu extends Phaser.Scene {
       extra: 'margin-top:-4px;',
     });
 
-    this.bindEvents();
-    this.refreshModes();
-    this.refreshLeaderboard();
+    this.refreshNav();
   }
 
-  private bindEvents() {
-    this.containerEl.querySelectorAll('.dd-level-card').forEach(cardEl => {
-      cardEl.addEventListener('click', () => {
-        const el = cardEl as HTMLElement;
-        if (el.dataset.locked === '1') return;
-        this.audio.playClick();
-        this.scene.start('Game', { startTier: el.dataset.tier as Tier, audio: this.audio });
-      });
-    });
-
-    this.containerEl.querySelector('#btn-invite')?.addEventListener('click', async () => {
-      this.audio.playClick();
-      const identity = getIdentity();
-      if (!identity?.inviteCode) return;
-      const link = buildInviteLink(identity.inviteCode);
-      try {
-        await navigator.clipboard.writeText(link);
-        const btn = this.containerEl.querySelector('#btn-invite') as HTMLButtonElement;
-        const original = btn.textContent;
-        btn.textContent = 'Link copied!';
-        btn.style.color = theme.color.success;
-        setTimeout(() => { if (btn) { btn.textContent = original; btn.style.color = theme.color.textSecondary; } }, 2000);
-      } catch {
-        prompt('Copy your invite link:', link);
-      }
-    });
-  }
-
-  // Progressive-reveal shell: fetches this player's unlock state (if logged
-  // in) and renders each future mode as either a locked teaser or a
-  // "log in to unlock" prompt for guests. None of these modes exist yet
-  // (Phase 1/3/4), so canAccessMode currently reports them all as
-  // not-yet-available — this scaffolding just means later phases only
-  // need to ship the mode itself, not new home-screen logic.
-  private async refreshModes() {
-    const modesCard = this.containerEl?.querySelector('#modes-card') as HTMLElement;
-    if (!modesCard) return;
+  // Fetches this player's unlock state (if logged in) and renders each
+  // system as a nav card: open ('challenge_categories', and anything else
+  // canAccessMode allows) or a locked teaser with the same reasons/progress
+  // UI the old inline "More ways to play" section used.
+  private async refreshNav() {
+    const navCard = this.containerEl?.querySelector('#nav-card') as HTMLElement;
+    if (!navCard) return;
 
     const identity = getIdentity();
     const isLoggedIn = !!identity && !identity.isGuest;
@@ -178,118 +102,43 @@ export class MainMenu extends Phaser.Scene {
       try {
         unlocks = await fetchPlayerUnlocks(identity.userId);
       } catch (err) {
-        console.error('[TypeType] fetchPlayerUnlocks failed, defaulting to locked', err);
+        console.error('[DigitDash] fetchPlayerUnlocks failed', err);
       }
     }
 
     const auth: AuthState = { isLoggedIn, unlocks };
 
-    modesCard.innerHTML = REVEAL_MODES.map(({ mode, title, teaser }) => {
+    navCard.innerHTML = NAV_MODES.map(({ mode, title, teaser, scene }) => {
       const access = canAccessMode(mode, auth);
-      return modeSlot(mode, title, teaser, access);
+      return navSlot(mode, title, teaser, access, scene);
     }).join('');
 
-    modesCard.querySelectorAll<HTMLElement>('[data-playable="1"]').forEach(el => {
+    navCard.querySelectorAll<HTMLElement>('[data-playable="1"]').forEach(el => {
       el.addEventListener('click', () => {
-        const mode = el.dataset.mode as GameMode;
-        if (mode === 'daily_challenge') {
-          this.scene.start('DailyChallenge');
-        }
-        // Other modes (endless, levels) get their own branch here once
-        // their scenes ship in later phases — same pattern, new case.
+        this.audio.playClick();
+        const scene = el.dataset.scene as string;
+        this.scene.start(scene, { audio: this.audio });
       });
     });
-  }
-
-  private async refreshLeaderboard() {
-    const lbCard = this.containerEl?.querySelector('#lb-card') as HTMLElement;
-    if (lbCard) {
-      lbCard.style.justifyContent = 'center';
-      lbCard.innerHTML = spinner();
-    }
-
-    const identity = getIdentity();
-    const username = identity?.username ?? '';
-
-    let entries: LadderEntry[] | SquadEntry[] = [];
-    let overtookMeUserIds = new Set<string>();
-    try {
-      entries = identity ? await platform.fetchSquad(identity.userId, identity.invitedBy) : [];
-
-      if (identity) {
-        const overtakes: RankOvertake[] = await platform.fetchUnseenOvertakes(identity.userId);
-        if (overtakes.length > 0) {
-          overtookMeUserIds = new Set(overtakes.map(o => o.overtakenByUserId));
-          platform.markOvertakesSeen(identity.userId).catch(() => {});
-        }
-      }
-    } catch (err) {
-      console.error('[DigitDash] leaderboard fetch failed', err);
-      if (lbCard) {
-        lbCard.innerHTML = `<div style="color:${theme.color.textMuted};font-size:12px;text-align:center;padding:16px;">
-          Couldn't load the leaderboard. Try again shortly.</div>`;
-      }
-      return;
-    }
-
-    phaserGame.registry.set('ladder', entries);
-    if (!lbCard) return;
-
-    if (entries.length === 0) {
-      lbCard.style.justifyContent = 'center';
-      lbCard.innerHTML = `
-        <div style="color:${theme.color.textMuted};font-size:12px;text-align:center;padding:20px;">
-          No friends yet — invite someone to see them here.
-        </div>`;
-      return;
-    }
-
-    lbCard.style.justifyContent = 'flex-start';
-    lbCard.innerHTML = `
-      <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
-        ${entries.map((e, i) => lbRow(e, i, username, overtookMeUserIds)).join('')}
-      </div>`;
   }
 }
 
 // ─── Style helpers ────────────────────────────────────────────────────────
 
-function levelCard(t: Tier, highest: Tier, hasBadge: boolean) {
-  const unlocked = TIER_ORDER.indexOf(t) <= TIER_ORDER.indexOf(highest);
-  const isCurrent = t === highest;
-  const c = theme.color;
-  const tierColor = TIER_COLORS[t];
-  const tierLabelColor = TIER_LABEL_TEXT_COLORS[t];
-  return `
-    <div class="dd-level-card" data-tier="${t}" data-locked="${unlocked ? '0' : '1'}" style="
-      ${panel(`padding:14px 12px;${unlocked ? 'cursor:pointer;' : 'opacity:0.5;'}`)}
-      display:flex;flex-direction:column;gap:4px;
-      ${isCurrent ? `border-color:${tierColor};border-width:2px;box-shadow:0 2px 12px ${tierColor}33;` : ''}">
-      <span style="font-size:10px;color:${unlocked ? tierLabelColor : c.textMuted};font-weight:700;">Level ${TIER_NUMBER[t]}</span>
-      <span style="font-family:${theme.font.display};font-size:17px;font-weight:700;color:${c.textPrimary};">
-        ${TIER_LABELS[t]}
-      </span>
-      <span style="font-size:10px;color:${unlocked ? c.success : c.textMuted};font-weight:600;">
-        ${!unlocked ? '🔒 Locked' : hasBadge ? '🏅 Bonus cleared' : isCurrent ? 'Current' : 'Cleared'}
-      </span>
-    </div>`;
-}
-
-// Renders one locked/teased slot in the "More ways to play" progressive-reveal
-// section. Deliberately non-interactive for now — none of these modes exist
-// to navigate to yet. Later phases just need to (a) remove the mode from
-// modeAccess.ts's NOT_YET_BUILT list and (b) add a click handler here that
-// starts the real scene once canAccessMode reports allowed:true.
-function modeSlot(mode: GameMode, title: string, teaser: string, access: AccessResult) {
+// Renders one hub nav card. Same visual language as the old inline
+// "More ways to play" modeSlot — open systems are clickable and route to
+// their scene; locked ones show the same reason/progress messaging as
+// before, just relocated here from MainMenu's old single-scroll layout.
+function navSlot(mode: GameMode, title: string, teaser: string, access: AccessResult, scene: string) {
   const c = theme.color;
 
   if (access.allowed) {
     return `
-      <div class="dd-mode-slot" data-mode="${mode}" data-playable="1" style="
-        ${panel('padding:12px 14px;cursor:pointer;')}display:flex;align-items:center;justify-content:space-between;gap:10px;
+      <div class="dd-mode-slot" data-mode="${mode}" data-scene="${scene}" data-playable="1" style="
+        ${panel('padding:14px 16px;cursor:pointer;')}display:flex;align-items:center;justify-content:space-between;gap:10px;
         border-color:${c.accent};">
         <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
-          <span style="font-family:${theme.font.display};font-size:14px;font-weight:700;color:${c.textPrimary};">${title}</span>
+          <span style="font-family:${theme.font.display};font-size:15px;font-weight:700;color:${c.textPrimary};">${title}</span>
           <span style="font-size:11px;color:${c.textMuted};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${teaser}</span>
         </div>
         <span style="font-size:10px;font-weight:700;color:${c.accent};">▶ Play</span>
@@ -309,9 +158,9 @@ function modeSlot(mode: GameMode, title: string, teaser: string, access: AccessR
   }
 
   return `
-    <div style="${panel('padding:12px 14px;opacity:0.6;')}display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <div style="${panel('padding:14px 16px;opacity:0.6;')}display:flex;align-items:center;justify-content:space-between;gap:10px;">
       <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
-        <span style="font-family:${theme.font.display};font-size:14px;font-weight:700;color:${c.textPrimary};">${title}</span>
+        <span style="font-family:${theme.font.display};font-size:15px;font-weight:700;color:${c.textPrimary};">${title}</span>
         <span style="font-size:11px;color:${c.textMuted};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${teaser}</span>
       </div>
       ${statusHtml}
@@ -324,40 +173,5 @@ function spinner(msg = 'Loading…') {
       <div style="width:20px;height:20px;border:2px solid ${theme.color.border};border-top:2px solid ${theme.color.accent};
                   border-radius:50%;animation:spin 0.9s linear infinite;"></div>
       <span style="font-size:11px;color:${theme.color.textMuted};">${msg}</span>
-    </div>`;
-}
-
-function lbRow(e: LadderEntry, i: number, myUsername: string, overtookMeUserIds?: Set<string>) {
-  const c = theme.color;
-  const isMe = e.username.toLowerCase() === myUsername.toLowerCase();
-  const justPassedMe = !!overtookMeUserIds?.has(e.userId);
-  const rankColor = i === 0 ? theme.palette.yellow : i === 1 ? c.textSecondary : i === 2 ? theme.palette.orange : c.textMuted;
-
-  let badgeHtml = '';
-  if (e.clearedHiddenBonusTiers?.length) {
-    badgeHtml = `<span style="font-size:10px;font-weight:700;color:${theme.palette.orange};margin-right:5px;">🏅×${e.clearedHiddenBonusTiers.length}</span>`;
-  }
-  if (e.hasLimitBreakAward) {
-    badgeHtml += `<span style="font-size:10px;font-weight:700;color:${c.success};margin-right:5px;">⚡</span>`;
-  }
-
-  return `
-    <div style="display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:10px;font-size:12px;
-      background:${isMe ? theme.color.accentDim : justPassedMe ? theme.palette.coral + '1a' : 'transparent'};">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
-          <span style="font-weight:700;color:${rankColor};width:20px;flex-shrink:0;">#${i + 1}</span>
-          <div style="display:flex;align-items:center;gap:3px;min-width:0;overflow:hidden;">
-            ${badgeHtml}
-            <span style="font-weight:700;color:${e.hasLimitBreakAward ? c.success : c.textPrimary};
-              overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.username}</span>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-          <span style="font-size:10px;color:${c.textMuted};font-weight:700;">${TIER_LABELS[e.highestTier]}</span>
-          <span style="color:${c.textPrimary};font-weight:700;font-family:${theme.font.mono};">${(e.bestTotalTimeMs / 1000).toFixed(3)}s</span>
-        </div>
-      </div>
-      ${justPassedMe ? `<span style="font-size:10px;font-weight:700;color:${theme.palette.coral};padding-left:29px;">🔥 ${e.username} passed you!</span>` : ''}
     </div>`;
 }
