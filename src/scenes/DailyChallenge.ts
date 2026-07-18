@@ -5,6 +5,7 @@ import { AudioManager } from '../lib/audio';
 import { theme, panel, label, primaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { getIdentity } from '../game';
+import { platform } from '../lib/standaloneAdapter';
 import { fetchDailyChallenge, submitDailyChallengeRun, type DailyEquation } from '../lib/dailyChallenge';
 import type { Tier, RoundResult } from '../shared/types';
 
@@ -81,6 +82,7 @@ export class DailyChallenge extends Phaser.Scene {
   private timerDone = false;
   private timerEvent?: Phaser.Time.TimerEvent;
   private onKeyDown?: (e: KeyboardEvent) => void;
+  private isQuitModalOpen = false;
 
   constructor() {
     super('DailyChallenge');
@@ -93,6 +95,7 @@ export class DailyChallenge extends Phaser.Scene {
     this.reachedBonus = false;
     this.timerDone = false;
     this.answerInput = '';
+    this.isQuitModalOpen = false;
   }
 
   create() {
@@ -244,6 +247,9 @@ export class DailyChallenge extends Phaser.Scene {
           <h1 style="font-family:${theme.font.display};font-size:17px;font-weight:800;color:${c.textPrimary};margin:0;">
             TypeType
           </h1>
+          <button id="btn-quit" style="padding:7px 14px;background:transparent;
+            border:1px solid ${c.danger};color:${c.danger};border-radius:8px;font-size:11px;
+            font-weight:700;cursor:pointer;">Quit</button>
         </div>
 
         <div style="margin-bottom:8px;flex-shrink:0;">${label(this.stageLabel(), c.textMuted)}</div>
@@ -298,6 +304,11 @@ export class DailyChallenge extends Phaser.Scene {
     const timerDisplay = this.containerEl.querySelector('#timer-display') as HTMLElement;
     timerDisplay.textContent = formatTimer(this.timeLeft);
 
+    this.containerEl.querySelector('#btn-quit')?.addEventListener('click', () => {
+      this.audio.playClick();
+      this.renderQuitModal();
+    });
+
     this.containerEl.querySelectorAll('.kp').forEach(btn => {
       btn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
@@ -322,7 +333,7 @@ export class DailyChallenge extends Phaser.Scene {
       delay: 16,
       loop: true,
       callback: () => {
-        if (this.timerDone || this.phase !== 'playing') {
+        if (this.timerDone || this.phase !== 'playing' || this.isQuitModalOpen) {
           this.lastTime = performance.now();
           return;
         }
@@ -349,7 +360,7 @@ export class DailyChallenge extends Phaser.Scene {
   private bindKeyboard() {
     if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
     this.onKeyDown = (e: KeyboardEvent) => {
-      if (this.timerDone || this.phase !== 'playing') return;
+      if (this.timerDone || this.phase !== 'playing' || this.isQuitModalOpen) return;
       const k = e.key;
       if (/^[0-9.]$/.test(k) || k === '+' || k === '-') {
         e.preventDefault();
@@ -362,10 +373,100 @@ export class DailyChallenge extends Phaser.Scene {
     window.addEventListener('keydown', this.onKeyDown);
   }
 
+  // ── Quit modal ────────────────────────────────────────────────────────
+  // Ported from Game.ts's quit modal so both the ladder and Daily Challenge
+  // share the same free-quit-count / rewarded-ad gating.
+
+  private renderQuitModal() {
+    this.isQuitModalOpen = true;
+    if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
+
+    const c = theme.color;
+    const identity = getIdentity();
+    const userId = identity?.userId ?? 'anon';
+    const unlimited = platform.hasUnlimitedQuitRetry(userId);
+    const freeLeft = platform.getFreeQuitsRemaining(userId);
+    const needsAd = !unlimited && freeLeft <= 0;
+
+    const modal = document.createElement('div');
+    modal.id = 'quit-modal-overlay';
+    modal.style.cssText = `
+      position:absolute;inset:0;z-index:1000;background:rgba(45,52,54,0.55);backdrop-filter:blur(4px);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;
+      font-family:${theme.font.body};animation:fadeIn 0.15s;
+    `;
+
+    modal.innerHTML = `
+      <div style="width:100%;max-width:300px;${panel('padding:24px 20px;')}display:flex;flex-direction:column;
+        align-items:center;gap:16px;text-align:center;animation:popIn 0.18s;">
+        <div style="font-family:${theme.font.display};font-size:16px;font-weight:800;color:${c.textPrimary};">
+          ${needsAd ? "You're out of free retries" : 'Quit this run?'}
+        </div>
+        <p style="font-size:12.5px;color:${c.textSecondary};line-height:1.7;margin:0;">
+          ${needsAd
+            ? 'Watch a short ad to unlock unlimited quits and retries, for good.'
+            : `You'll lose progress on today's challenge.<br><span style="color:${c.textMuted};">${freeLeft} free ${freeLeft === 1 ? 'retry' : 'retries'} left.</span>`}
+        </p>
+        <div style="width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <button id="btn-modal-resume" style="padding:12px 0;background:transparent;border:1px solid ${c.borderStrong};
+            border-radius:10px;color:${c.textPrimary};font-family:${theme.font.display};font-weight:700;font-size:13px;cursor:pointer;">
+            Keep Playing
+          </button>
+          <button id="btn-modal-quit" style="padding:12px 0;background:${c.dangerDim};
+            border:1px solid ${c.danger};border-radius:10px;color:${c.danger};font-family:${theme.font.display};
+            font-weight:700;font-size:13px;cursor:pointer;">
+            ${needsAd ? 'Watch Ad' : 'Quit'}
+          </button>
+        </div>
+      </div>
+    `;
+
+    this.containerEl.appendChild(modal);
+
+    const btnResume = modal.querySelector('#btn-modal-resume') as HTMLButtonElement;
+    const btnQuit = modal.querySelector('#btn-modal-quit') as HTMLButtonElement;
+
+    btnResume.addEventListener('click', () => {
+      this.audio.playClick();
+      modal.remove();
+      this.isQuitModalOpen = false;
+      this.lastTime = performance.now();
+      this.bindKeyboard();
+    });
+
+    btnQuit.addEventListener('click', async () => {
+      this.audio.playClick();
+      if (needsAd) {
+        btnQuit.textContent = 'Loading…';
+        btnQuit.disabled = true;
+        const granted = await platform.showRewardedAd();
+        if (granted) platform.grantUnlimitedQuitRetry(userId);
+        modal.remove();
+        if (granted) this.quitToLobby();
+        else {
+          this.isQuitModalOpen = false;
+          this.lastTime = performance.now();
+          this.bindKeyboard();
+        }
+        return;
+      }
+      if (!unlimited) platform.consumeFreeQuit(userId);
+      modal.remove();
+      this.quitToLobby();
+    });
+  }
+
+  private quitToLobby() {
+    this.timerEvent?.destroy();
+    if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
+    this.audio.stopMusic();
+    this.scene.start('MainMenu');
+  }
+
   // ── Input handling ───────────────────────────────────────────────────
 
   private addChar(ch: string) {
-    if (this.timerDone || this.phase !== 'playing') return;
+    if (this.timerDone || this.phase !== 'playing' || this.isQuitModalOpen) return;
     const targetLen = this.currentTarget.length;
     if (targetLen === 0) return;
 
@@ -382,7 +483,7 @@ export class DailyChallenge extends Phaser.Scene {
   }
 
   private deleteChar() {
-    if (this.timerDone || this.phase !== 'playing') return;
+    if (this.timerDone || this.phase !== 'playing' || this.isQuitModalOpen) return;
     this.audio.playClick();
     this.answerInput = this.answerInput.slice(0, -1);
     this.updateInputDisplay();
@@ -519,9 +620,15 @@ export class DailyChallenge extends Phaser.Scene {
   private checkBenchmark() {
     this.phase = 'benchmark_check';
     const basicResults = this.results.slice(0, TOTAL_BASIC);
+
+    // Bug fix: a fast WRONG answer has a low timeTaken too, so averaging
+    // timeTaken alone let 0-point runs sneak under the benchmark and unlock
+    // bonus stages. Bonus stages must be earned by clearing all 5 basic
+    // stages correctly, on top of beating the speed benchmark.
+    const allCorrect = basicResults.every(r => r.status === 'correct');
     const totalMs = basicResults.reduce((a, r) => a + r.timeTaken * 1000, 0);
     const avgMs = totalMs / basicResults.length;
-    this.reachedBonus = avgMs <= this.speedBenchmarkMs;
+    this.reachedBonus = allCorrect && avgMs <= this.speedBenchmarkMs;
 
     if (this.reachedBonus) {
       this.showBonusUnlocked(avgMs);
