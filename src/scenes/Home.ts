@@ -142,7 +142,7 @@ export class Home extends Phaser.Scene {
 
     this.renderChallengeCategoriesPage();
     this.renderDailyChallengePage({ allowed: false, reason: 'locked' }, this.auth);
-    this.renderEndlessPage(this.auth);
+    this.renderEndlessPage({ allowed: false, reason: 'locked' }, this.auth);
     this.renderLevelsPage(this.auth);
 
     this.bindShellEvents();
@@ -339,17 +339,40 @@ export class Home extends Phaser.Scene {
     });
   }
 
-  // ── Page 3 & 4: Endless / Levels — not built yet, always blurred+teased ──
+  // ── Page 3: Endless (landing-only — real gameplay stays in EndlessMode.ts) ──
 
-  private renderEndlessPage(auth: AuthState) {
+  private renderEndlessPage(access: AccessResult, auth: AuthState) {
+    const c = theme.color;
     const page = this.containerEl.querySelector('#page-endless') as HTMLElement;
-    page.innerHTML = renderLockedPageHTML(
-      'Endless Mode',
-      'One mistake ends it \u2014 how far can you get?',
-      auth,
-      ENDLESS_LEVELS_DAYS_REQUIRED
-    );
+    const locked = access.reason === 'guest_not_allowed' || access.reason === 'locked';
+
+    if (locked) {
+      const teaser = access.reason === 'guest_not_allowed'
+        ? 'Log in to start a run'
+        : 'One mistake ends it \u2014 how far can you get?';
+      page.innerHTML = renderLockedPageHTML('Endless Mode', teaser, auth, ENDLESS_LEVELS_DAYS_REQUIRED);
+      return;
+    }
+
+    page.innerHTML = `
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;">
+        <div style="${panel('padding:28px 22px;')}max-width:320px;display:flex;flex-direction:column;gap:10px;align-items:center;">
+          <span style="font-family:${theme.font.display};font-size:20px;font-weight:800;color:${c.textPrimary};">
+            Endless Mode
+          </span>
+          <span style="font-size:12.5px;color:${c.textMuted};">Climb Easy → Boss, then hold on as long as you can.</span>
+        </div>
+        ${primaryButton('Start', 'btn-start-endless', 'max-width:320px;')}
+      </div>
+    `;
+
+    page.querySelector('#btn-start-endless')?.addEventListener('click', () => {
+      this.audio.playClick();
+      this.scene.start('EndlessMode', { audio: this.audio });
+    });
   }
+
+  // ── Page 4: Levels — not built yet, always blurred+teased ──
 
   private renderLevelsPage(auth: AuthState) {
     const page = this.containerEl.querySelector('#page-levels') as HTMLElement;
@@ -374,9 +397,10 @@ export class Home extends Phaser.Scene {
       this.auth.unlocks = await fetchPlayerUnlocks(identity.userId);
     }
 
-    const access = canAccessMode('daily_challenge', this.auth);
-    this.renderDailyChallengePage(access, this.auth);
-    this.renderEndlessPage(this.auth);
+    const dailyAccess = canAccessMode('daily_challenge', this.auth);
+    const endlessAccess = canAccessMode('endless', this.auth);
+    this.renderDailyChallengePage(dailyAccess, this.auth);
+    this.renderEndlessPage(endlessAccess, this.auth);
     this.renderLevelsPage(this.auth);
   }
 }
