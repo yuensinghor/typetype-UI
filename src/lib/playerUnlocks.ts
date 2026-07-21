@@ -2,6 +2,11 @@
 //
 // Fetches the player_unlocks view (Supabase) for a given user and maps it
 // into the PlayerUnlocks shape that canAccessMode() expects.
+//
+// v2 (nav redesign): the old sequential gates (clearedEasyTier,
+// endlessRunsCompleted) are gone. Everything now derives from two signals:
+// clearedAllTiers (all 4 ladder tiers cleared) and distinctDaysPlayed
+// (calendar days with any activity) — see 005_unlock_chain_v2.sql.
 
 import { supabase } from './supabaseClient';
 import type { PlayerUnlocks } from './modeAccess';
@@ -10,15 +15,14 @@ import type { PlayerUnlocks } from './modeAccess';
 // canAccessMode already blocks them before unlocks matter) and for brand
 // new accounts that don't have a player_progress row yet.
 const DEFAULT_UNLOCKS: PlayerUnlocks = {
-  clearedEasyTier: false,
-  distinctDaysPlayedDaily: 0,
-  endlessRunsCompleted: 0,
+  clearedAllTiers: false,
+  distinctDaysPlayed: 0,
 };
 
 export async function fetchPlayerUnlocks(userId: string): Promise<PlayerUnlocks> {
   const { data, error } = await supabase
     .from('player_unlocks')
-    .select('cleared_easy_tier, distinct_days_played_daily, endless_runs_completed')
+    .select('cleared_all_tiers, distinct_days_played')
     .eq('user_id', userId)
     .maybeSingle(); // no row yet (new account) is a valid, non-error state
 
@@ -32,8 +36,7 @@ export async function fetchPlayerUnlocks(userId: string): Promise<PlayerUnlocks>
   }
 
   return {
-    clearedEasyTier: data.cleared_easy_tier,
-    distinctDaysPlayedDaily: data.distinct_days_played_daily,
-    endlessRunsCompleted: data.endless_runs_completed,
+    clearedAllTiers: data.cleared_all_tiers,
+    distinctDaysPlayed: data.distinct_days_played,
   };
 }

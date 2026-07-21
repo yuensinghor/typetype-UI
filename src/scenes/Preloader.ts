@@ -3,6 +3,7 @@ import { phaserGame } from '../game';
 import { platform } from '../lib/standaloneAdapter';
 import { isSupabaseConfigured, supabaseConfigError } from '../lib/supabaseClient';
 import { floatingBackgroundHTML } from '../lib/floatingNumbers';
+import { recordLoginDayIfNeeded } from '../lib/loginDay';
 import {
   resolveIdentity,
   signInWithGoogle,
@@ -233,23 +234,26 @@ export class Preloader extends Phaser.Scene {
       phaserGame.registry.set('identity', identity);
       if (!identity.isGuest) {
         await platform.syncQuitRetryUnlock(identity.userId);
+        await recordLoginDayIfNeeded(identity.userId);
       }
 
       const saved = await platform.loadProgress<{
         highestUnlockedTier: Tier;
         badges: Partial<Record<Tier, boolean>>;
         hasLimitBreakAward: boolean;
+        clearedBossBasic: boolean;
       }>(identity.userId, 'ladder_progress');
 
       phaserGame.registry.set('highestUnlockedTier', saved?.highestUnlockedTier ?? 'easy');
       phaserGame.registry.set('tierBadges', saved?.badges ?? {});
       phaserGame.registry.set('hasLimitBreakAward', saved?.hasLimitBreakAward ?? false);
+      phaserGame.registry.set('clearedBossBasic', saved?.clearedBossBasic ?? false);
 
       const ladder = await platform.fetchLadder();
       phaserGame.registry.set('ladder', ladder);
 
       this.containerEl.closest('.dd-shell')?.remove();
-      this.scene.start('MainMenu');
+      this.scene.start('Home');
     } catch (err: any) {
       console.error('[DigitDash] finishBoot failed:', err);
       this.showError('Something went wrong loading the game.', err?.message ?? String(err));

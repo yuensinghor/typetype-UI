@@ -624,7 +624,7 @@ export class Game extends Phaser.Scene {
     this.timerEvent?.destroy();
     if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
     this.audio.stopMusic();
-    this.scene.start('MainMenu');
+    this.scene.start('Home');
   }
 }
 

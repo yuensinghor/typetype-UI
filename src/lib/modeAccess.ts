@@ -3,6 +3,13 @@
 // Single source of truth for "can this player enter this mode right now."
 // Every screen/scene that gates entry to a mode should call canAccessMode()
 // instead of writing its own guest/login/unlock check.
+//
+// v2 (nav redesign): replaces the old sequential chain (clear Easy ->
+// Daily Challenge -> 7 Daily Challenge days -> Endless -> 10 Endless runs
+// -> Levels) with a day-counter that runs independently of skill progress:
+//   - Daily Challenge: all 4 ladder tiers cleared AND >= 3 distinct days played
+//   - Endless + Levels: all 4 ladder tiers cleared AND >= 7 distinct days played (together)
+// See 005_unlock_chain_v2.sql and playerUnlocks.ts.
 
 export type GameMode =
   | 'challenge_categories'  // existing 4-tier ladder, friends-only funnel
@@ -11,14 +18,9 @@ export type GameMode =
   | 'levels'                // Phase 4
   | 'battle_pass';          // Phase 5 (not a "mode" you enter, but gated the same way)
 
-// Minimal shape for now — PlayerUnlocks gets filled in properly by the
-// player_unlocks read model (next step). Fields default to false/0 until
-// then, which just means every gated mode reports "locked" — correct
-// behavior since none of those modes exist yet either.
 export interface PlayerUnlocks {
-  clearedEasyTier: boolean;      // gates daily_challenge
-  distinctDaysPlayedDaily: number; // gates endless (needs >= 7)
-  endlessRunsCompleted: number;    // gates levels (needs >= N, TBD in Phase 4)
+  clearedAllTiers: boolean;   // all 4 ladder tiers (Easy->Medium->Hard->Boss) cleared
+  distinctDaysPlayed: number; // calendar days with any activity, non-consecutive OK
 }
 
 export interface AuthState {
@@ -29,10 +31,13 @@ export interface AuthState {
 export interface AccessResult {
   allowed: boolean;
   reason?: 'guest_not_allowed' | 'locked' | 'not_yet_available';
-  // Optional context for teaser UI (Phase 0's "locked slots" + later phases'
-  // progress pips) to render something concrete instead of a generic lock icon.
+  // Optional context for the carousel's U-N-L-O-C-K progress bar and the
+  // locked-page teaser, so it can show real progress instead of a plain lock.
   progress?: { current: number; required: number };
 }
+
+export const DAILY_CHALLENGE_DAYS_REQUIRED = 3;
+export const ENDLESS_LEVELS_DAYS_REQUIRED = 7;
 
 // Modes not built yet. Update this as each phase ships so the gate
 // automatically stops reporting "not_yet_available" once the mode is real.
@@ -55,27 +60,36 @@ export function canAccessMode(mode: GameMode, auth: AuthState): AccessResult {
     return { allowed: false, reason: 'not_yet_available' };
   }
 
-  switch (mode) {
-    case 'daily_challenge':
-      // Unlocks after clearing Easy tier (5 stages) in Challenge Categories.
-      return auth.unlocks.clearedEasyTier
-        ? { allowed: true }
-        : { allowed: false, reason: 'locked' };
+  const { clearedAllTiers, distinctDaysPlayed } = auth.unlocks;
 
-    case 'endless': {
-      const required = 7;
-      const current = auth.unlocks.distinctDaysPlayedDaily;
-      return current >= required
+  switch (mode) {
+    case 'daily_challenge': {
+      if (!clearedAllTiers) {
+        // Tiers-cleared is a prerequisite with no partial progress to show
+        // (it's a different axis than the day counter), so no progress here.
+        return { allowed: false, reason: 'locked' };
+      }
+      return distinctDaysPlayed >= DAILY_CHALLENGE_DAYS_REQUIRED
         ? { allowed: true }
-        : { allowed: false, reason: 'locked', progress: { current, required } };
+        : {
+            allowed: false,
+            reason: 'locked',
+            progress: { current: distinctDaysPlayed, required: DAILY_CHALLENGE_DAYS_REQUIRED },
+          };
     }
 
+    case 'endless':
     case 'levels': {
-      const required = 10; // placeholder, finalize in Phase 4
-      const current = auth.unlocks.endlessRunsCompleted;
-      return current >= required
+      if (!clearedAllTiers) {
+        return { allowed: false, reason: 'locked' };
+      }
+      return distinctDaysPlayed >= ENDLESS_LEVELS_DAYS_REQUIRED
         ? { allowed: true }
-        : { allowed: false, reason: 'locked', progress: { current, required } };
+        : {
+            allowed: false,
+            reason: 'locked',
+            progress: { current: distinctDaysPlayed, required: ENDLESS_LEVELS_DAYS_REQUIRED },
+          };
     }
 
     case 'battle_pass':

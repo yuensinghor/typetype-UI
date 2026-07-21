@@ -95,14 +95,26 @@ export class GameOver extends Phaser.Scene {
     const savedAward = this.game.registry.get('hasLimitBreakAward') ?? false;
     const mergedAward = savedAward || hasLimitBreakAward;
 
+    // "All 4 tiers cleared" signal for the day-counter unlock chain
+    // (Daily Challenge / Endless / Levels). snapshot only exists when a
+    // tier's basic 5 stages were just cleared with 100% accuracy, so a
+    // snapshot for 'boss' specifically means Boss's basic stages are
+    // cleared — and since Boss can't be reached without clearing Easy,
+    // Medium, and Hard first, that's the exact moment all 4 are done.
+    // Never regresses: once true, stays true.
+    const savedClearedBossBasic = this.game.registry.get('clearedBossBasic') ?? false;
+    const mergedClearedBossBasic = savedClearedBossBasic || snapshot?.tier === 'boss';
+
     this.game.registry.set('highestUnlockedTier', newHighest);
     this.game.registry.set('tierBadges', mergedBadges);
     this.game.registry.set('hasLimitBreakAward', mergedAward);
+    this.game.registry.set('clearedBossBasic', mergedClearedBossBasic);
 
     platform.saveProgress(identity.userId, 'ladder_progress', {
       highestUnlockedTier: newHighest,
       badges: mergedBadges,
       hasLimitBreakAward: mergedAward,
+      clearedBossBasic: mergedClearedBossBasic,
     });
   }
 
@@ -370,7 +382,7 @@ export class GameOver extends Phaser.Scene {
 
     this.containerEl.querySelector('#btn-lobby')?.addEventListener('click', () => {
       this.audio.playClick();
-      this.scene.start('MainMenu');
+      this.scene.start('Home');
     });
 
     this.containerEl.querySelector('#btn-replay')?.addEventListener('click', () => {

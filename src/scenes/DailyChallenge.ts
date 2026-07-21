@@ -2,11 +2,11 @@ import Phaser from 'phaser';
 import { getTimeLimit, getEndlessTimeLimit } from '../lib/equation';
 import { KEYPAD } from '../lib/keypad';
 import { AudioManager } from '../lib/audio';
-import { theme, panel, label, primaryButton } from '../lib/theme';
+import { theme, panel, label, primaryButton, secondaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { getIdentity } from '../game';
 import { platform } from '../lib/standaloneAdapter';
-import { fetchDailyChallenge, submitDailyChallengeRun, type DailyEquation } from '../lib/dailyChallenge';
+import { fetchDailyChallenge, submitDailyChallengeRun, fetchMyBestToday, type DailyEquation, type DailyChallengeBest } from '../lib/dailyChallenge';
 import type { Tier, RoundResult } from '../shared/types';
 
 // Stage -> tier mapping. MUST match supabase/functions/get-daily-challenge/index.ts
@@ -20,7 +20,7 @@ const STAGE_TIER: Record<number, Tier> = {
 const TOTAL_BASIC = 5;
 const TOTAL_STAGES = 10;
 
-type Phase = 'loading' | 'countdown' | 'playing' | 'round_result' | 'benchmark_check' | 'complete' | 'error';
+type Phase = 'loading' | 'landing' | 'countdown' | 'playing' | 'round_result' | 'benchmark_check' | 'complete' | 'error';
 
 function stripSpaces(s: string): string {
   return s.replace(/\s+/g, '');
@@ -34,6 +34,19 @@ function eqFontSize(len: number): string {
 
 function formatTimer(sec: number): string {
   return `${Math.max(0, sec).toFixed(2)}s`;
+}
+
+function formatChallengeDate(isoDate: string): string {
+  // isoDate is YYYY-MM-DD (UTC) from the server. Parsed as UTC explicitly
+  // so it can't shift a day depending on the player's local timezone.
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+}
+
+function spinnerRow() {
+  return `
+    <div style="width:16px;height:16px;border:2px solid ${theme.color.border};border-top:2px solid ${theme.color.accent};
+      border-radius:50%;animation:spin 0.9s linear infinite;"></div>`;
 }
 
 function infoRow(labelText: string, value: string, color: string) {
@@ -142,7 +155,7 @@ export class DailyChallenge extends Phaser.Scene {
       this.challengeDate = daily.challengeDate;
       this.equationSet = daily.equationSet;
       this.speedBenchmarkMs = daily.speedBenchmarkMs;
-      this.showCountdown();
+      this.showLanding();
     } catch (err) {
       console.error('[TypeType] loadTodaysChallenge failed:', err);
       this.renderError();
@@ -163,8 +176,80 @@ export class DailyChallenge extends Phaser.Scene {
       </div>`;
     this.containerEl.querySelector('#btn-back-error')?.addEventListener('click', () => {
       this.containerEl?.closest('.dd-shell')?.remove();
-      this.scene.start('MainMenu');
+      this.scene.start('Home');
     });
+  }
+
+  // ── Landing ──────────────────────────────────────────────────────────
+
+  private async showLanding() {
+    this.phase = 'landing';
+    const c = theme.color;
+
+    this.containerEl.innerHTML = `
+      <div style="flex:1;width:100%;padding:28px 20px;display:flex;flex-direction:column;
+        align-items:center;justify-content:center;text-align:center;box-sizing:border-box;gap:14px;">
+        <span style="font-family:${theme.font.display};font-size:22px;font-weight:800;color:${c.textPrimary};">
+          Daily Challenge
+        </span>
+        <span style="font-size:11.5px;color:${c.textMuted};">${formatChallengeDate(this.challengeDate)}</span>
+        <div id="daily-best-card" style="width:100%;max-width:320px;${panel('padding:16px 18px;')}min-height:52px;
+          display:flex;align-items:center;justify-content:center;">
+          ${spinnerRow()}
+        </div>
+        <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+          ${primaryButton('Start', 'btn-daily-start', 'max-width:320px;')}
+          ${secondaryButton('Back', 'btn-daily-back', 'max-width:320px;')}
+        </div>
+      </div>
+    `;
+
+    this.containerEl.querySelector('#btn-daily-start')?.addEventListener('click', () => {
+      this.audio.playClick();
+      this.showCountdown();
+    });
+    this.containerEl.querySelector('#btn-daily-back')?.addEventListener('click', () => {
+      this.audio.playClick();
+      this.containerEl?.closest('.dd-shell')?.remove();
+      this.scene.start('Home');
+    });
+
+    const identity = getIdentity();
+    const bestCard = this.containerEl.querySelector('#daily-best-card') as HTMLElement;
+    if (!identity || identity.isGuest) {
+      // Shouldn't normally happen — Home.ts already gates guests out of
+      // this scene — but render something sane rather than an infinite spinner.
+      bestCard.innerHTML = `<span style="font-size:12px;color:${c.textMuted};">Log in to track your daily scores.</span>`;
+      return;
+    }
+
+    let best: DailyChallengeBest | null = null;
+    try {
+      best = await fetchMyBestToday(identity.userId, this.challengeDate);
+    } catch (err) {
+      console.error('[TypeType] fetchMyBestToday failed:', err);
+    }
+
+    // Phase is checked in case the player already tapped Start while this
+    // was loading — don't clobber the countdown/playing UI that replaced it.
+    if (this.phase !== 'landing') return;
+
+    if (!best) {
+      bestCard.innerHTML = `<span style="font-size:12.5px;color:${c.textMuted};">You haven't played today yet — go for it!</span>`;
+    } else {
+      bestCard.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:4px;width:100%;">
+          <span style="font-size:11px;color:${c.textMuted};font-weight:600;">Your best today</span>
+          <span style="font-family:${theme.font.display};font-size:26px;font-weight:800;color:${c.textPrimary};">
+            ${best.totalScore} pts
+          </span>
+          <span style="font-size:11px;color:${best.reachedBonus ? c.accentBright : c.textMuted};font-weight:600;">
+            ${best.reachedBonus ? `${best.bonusStagesCleared}/5 bonus stages cleared` : 'Bonus stages not unlocked'}
+          </span>
+        </div>`;
+      const startBtn = this.containerEl.querySelector('#btn-daily-start');
+      if (startBtn) startBtn.textContent = 'Play Again';
+    }
   }
 
   // ── Countdown ────────────────────────────────────────────────────────
@@ -460,7 +545,7 @@ export class DailyChallenge extends Phaser.Scene {
     this.timerEvent?.destroy();
     if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
     this.audio.stopMusic();
-    this.scene.start('MainMenu');
+    this.scene.start('Home');
   }
 
   // ── Input handling ───────────────────────────────────────────────────
@@ -708,7 +793,7 @@ export class DailyChallenge extends Phaser.Scene {
     this.containerEl.querySelector('#btn-back')?.addEventListener('click', () => {
       this.audio.playClick();
       this.containerEl?.closest('.dd-shell')?.remove();
-      this.scene.start('MainMenu');
+      this.scene.start('Home');
     });
   }
 }

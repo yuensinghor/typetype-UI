@@ -79,3 +79,44 @@ export async function submitDailyChallengeRun(
     console.error('[TypeType] submitDailyChallengeRun failed:', error.message);
   }
 }
+
+export interface DailyChallengeBest {
+  totalScore: number;
+  reachedBonus: boolean;
+  bonusStagesCleared: number;
+}
+
+/**
+ * Self-only best score for today, for the Daily Challenge landing page.
+ * Deliberately NOT a public/global leaderboard — see file header. Reads the
+ * player's own game_events rows for this exact challenge date (matched via
+ * payload.challengeDate, not created_at, so a submission made close to
+ * UTC midnight can't land on the wrong day) and returns the highest score
+ * among their attempts, or null if they haven't played yet today.
+ */
+export async function fetchMyBestToday(
+  userId: string,
+  challengeDate: string,
+): Promise<DailyChallengeBest | null> {
+  const { data, error } = await supabase
+    .from('game_events')
+    .select('payload')
+    .eq('user_id', userId)
+    .eq('mode', 'daily_challenge')
+    .eq('payload->>challengeDate', challengeDate);
+
+  if (error) {
+    console.error('[TypeType] fetchMyBestToday failed:', error.message);
+    return null;
+  }
+  if (!data || data.length === 0) return null;
+
+  const runs = data.map(row => row.payload as DailyChallengeRunPayload);
+  const best = runs.reduce((a, b) => (b.totalScore > a.totalScore ? b : a));
+
+  return {
+    totalScore: best.totalScore,
+    reachedBonus: best.reachedBonus,
+    bonusStagesCleared: best.bonusStagesCleared,
+  };
+}

@@ -18,9 +18,8 @@ const NAV_MODES: { mode: GameMode; title: string; teaser: string; scene: string 
 ];
 
 const DEFAULT_UNLOCKS: PlayerUnlocks = {
-  clearedEasyTier: false,
-  distinctDaysPlayedDaily: 0,
-  endlessRunsCompleted: 0,
+  clearedAllTiers: false,
+  distinctDaysPlayed: 0,
 };
 
 export class MainMenu extends Phaser.Scene {

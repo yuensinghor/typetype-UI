@@ -248,8 +248,23 @@ async fetchChallengerByInviteCode(inviteCode: string): Promise<ChallengerSnapsho
         highestUnlockedTier: Tier;
         badges: Partial<Record<Tier, boolean>>;
         hasLimitBreakAward: boolean;
+        clearedBossBasic?: boolean;
       };
       try {
+        // clearedBossBasic is optional on the incoming value (older callers
+        // may not pass it) and, once true, must never be written back to
+        // false — read-modify-write against the existing row so a
+        // no-op/partial save can't accidentally regress it.
+        let clearedBossBasic = !!v.clearedBossBasic;
+        if (!clearedBossBasic) {
+          const { data: existing } = await supabase
+            .from('player_progress')
+            .select('cleared_boss_basic')
+            .eq('user_id', userId)
+            .maybeSingle();
+          clearedBossBasic = !!existing?.cleared_boss_basic;
+        }
+
         await supabase.from('player_progress').upsert(
           {
             user_id: userId,
@@ -259,6 +274,7 @@ async fetchChallengerByInviteCode(inviteCode: string): Promise<ChallengerSnapsho
             badge_hard: !!v.badges.hard,
             badge_boss: !!v.badges.boss,
             has_limit_break_award: v.hasLimitBreakAward,
+            cleared_boss_basic: clearedBossBasic,
           },
           { onConflict: 'user_id' }
         );
@@ -288,6 +304,7 @@ async fetchChallengerByInviteCode(inviteCode: string): Promise<ChallengerSnapsho
             boss: data.badge_boss,
           },
           hasLimitBreakAward: data.has_limit_break_award,
+          clearedBossBasic: data.cleared_boss_basic,
         } as unknown as T;
       } catch (err) {
         console.error('[DigitDash] loadProgress threw', err);
