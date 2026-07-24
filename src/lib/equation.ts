@@ -70,7 +70,9 @@ export function generateEquation(tier: Tier): Equation {
 
 // ── Timing (locked spec) ────────────────────────────────────────────────
 // Stages 1-5 ramp linearly from a start time down to an end time per tier.
-const RAMP: Record<Tier, { start: number; end: number }> = {
+// Exported so levelGenerator.ts (Phase 4) can interpolate a matching
+// difficulty-scaled ramp instead of hand-tuning a second reference curve.
+export const RAMP: Record<Tier, { start: number; end: number }> = {
   easy: { start: 2.0, end: 1.4 },
   medium: { start: 4.0, end: 2.6 },
   hard: { start: 6.0, end: 4.0 },

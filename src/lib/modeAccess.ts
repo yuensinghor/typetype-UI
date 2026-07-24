@@ -43,7 +43,8 @@ export const ENDLESS_LEVELS_DAYS_REQUIRED = 7;
 // automatically stops reporting "not_yet_available" once the mode is real.
 // Phase 1 shipped Daily Challenge — removed from this list.
 // Phase 3 shipped Endless Mode — removed from this list.
-const NOT_YET_BUILT: GameMode[] = ['levels', 'battle_pass'];
+// Phase 4 shipped Levels — removed from this list.
+const NOT_YET_BUILT: GameMode[] = ['battle_pass'];
 
 export function canAccessMode(mode: GameMode, auth: AuthState): AccessResult {
   // Challenge Categories: always open, guest or logged in.

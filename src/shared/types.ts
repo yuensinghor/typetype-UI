@@ -76,3 +76,53 @@ export interface RankOvertake {
   seen: boolean;
   createdAt: string;
 }
+
+// ── Phase 4: Discrete Levels + Stars ────────────────────────────────────
+
+/** The trait combo a level's content was generated from (see levelGenerator.ts). */
+export interface LevelTraits {
+  digitLength: 1 | 2 | 3;
+  termCount: 2 | 3 | 4;
+  decimalPresent: boolean;
+}
+
+export interface LevelEquation {
+  /** What's shown on screen, e.g. "12 + 34 - 5" (spaces included). */
+  equation: string;
+  /** What the player must type — equation with spaces stripped. Transcription target only. */
+  targetAnswer: string;
+  timeLimit: number; // seconds, derived from the level's budget
+}
+
+/** A fully generated level: deterministic for a given level number (seed = level number). */
+export interface LevelDefinition {
+  levelNumber: number;
+  budget: number;
+  traits: LevelTraits;
+  equations: LevelEquation[];
+}
+
+/** 0 = not cleared. 1/2/3 per the locked star criteria (see levelGenerator.ts header). */
+export type StarCount = 0 | 1 | 2 | 3;
+
+export interface LevelRunResult {
+  levelNumber: number;
+  results: RoundResult[];
+  stars: StarCount;
+  totalTimeMs: number;
+  accuracy: number; // 0..1, correct rounds / total rounds
+  mistakes: number;
+}
+
+/**
+ * Persisted per-player progress through Levels. starsByLevel gives O(1)
+ * random access per level (needed for the level-select map) without an
+ * event log — keyed by level number, storing this player's *best* star
+ * result for that level. See level_progress migration for storage notes.
+ */
+export interface LevelProgress {
+  userId: string;
+  highestLevel: number; // highest level number ever cleared (>=1 star)
+  starsByLevel: Record<number, StarCount>;
+  updatedAt: string;
+}
