@@ -2,8 +2,6 @@
 
 **typetype.fun** — a browser-based numeric equation *transcription* game. Players type displayed equations back character-for-character, as fast and accurately as possible. There is no "answer" to solve — the displayed string **is** the target input.
 
-Originally prototyped as a Reddit Devvit mini-game called **Digit Dash** (r/DigitDash67), now a fully independent, live-service PWA.
-
 ---
 
 ## Core mechanic (never violate)
@@ -89,7 +87,7 @@ Infinite survival run, one mistake ends it. Instant "GO" flash (250ms delay) ins
 
 ---
 
-### 4. Levels — Island Archipelago — 🎯 In design, not yet built
+Parked ### 4. Levels — Island Archipelago — 🎯 Parked
 
 Candy-Crush-style permanent numbered levels, procedurally generated so Supabase storage stays cheap. This is the highest design-risk mode, sequenced after Endless so it can reuse Endless's difficulty-curve logic.
 
@@ -128,7 +126,7 @@ Star-threshold gate between islands (e.g. 24/36 stars) drives replay. Low-risk v
 
 ---
 
-### 5. Social Layer (Levels) — 🎯 In design, not yet built
+Parked ### 5. Social Layer (Levels) — 🎯 Parked, not yet built
 
 Sits on top of Levels once solo progress exists. Async only — real-time/live PvP was explicitly rejected as too much infra for this phase and flagged as a possible distinct future phase instead.
 
@@ -168,7 +166,7 @@ Leaderboards, unlock states, derived stats, and battle pass points are all compu
 
 ---
 
-## Monetization — status: parked
+parked ## Monetization — status: parked
 
 Deliberately **not decided** pre-launch. Explored and rejected:
 - Full "unlock everything" bypass — undercuts the D3/D7 retention gates the unlock chain was built for
