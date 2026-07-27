@@ -143,6 +143,10 @@ export class Preloader extends Phaser.Scene {
     const c = theme.color;
     const ctx = this.challengeContext;
 
+    // Default landing (no challengeContext): a short tagline replaces the
+    // old "how to play" list, matching the simplified typetype.fun hero.
+    // Challenge Flow invite links still re-skin this screen with a
+    // headline/subline card via challengeContext — that path is unchanged.
     const introHtml = ctx
       ? `
         <div style="width:100%;background:${c.bgCard};border:1px solid ${c.border};border-radius:16px;
@@ -157,50 +161,34 @@ export class Preloader extends Phaser.Scene {
         </div>
       `
       : `
-        <div style="width:100%;background:${c.bgCard};border:1px solid ${c.border};border-radius:16px;
-          padding:16px 16px;text-align:left;box-shadow:0 2px 16px rgba(139,126,116,0.1);
-          animation:ddSpringIn 0.45s cubic-bezier(0.34,1.56,0.64,1) 0.3s both;">
-          <div style="font-family:${theme.font.display};font-size:12px;font-weight:700;color:${c.accent};
-            letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">How to play</div>
-          <ol style="margin:0;padding-left:18px;font-family:${theme.font.body};font-size:12.5px;color:${c.textSecondary};
-            line-height:1.7;">
-            <li>An equation like <b style="color:${c.textPrimary};">47 + 23</b> appears on screen.</li>
-            <li>Type it back exactly, using the keypad — as fast as you can.</li>
-            <li>Spaces don't count, so just focus on the digits and symbols.</li>
-            <li>Clear all 5 rounds with no mistakes to beat the level.</li>
-          </ol>
+        <div style="font-family:${theme.font.display};font-size:19px;font-weight:600;color:${c.textSecondary};
+          line-height:1.35;animation:ddSpringIn 0.4s ease-out 0.45s both;">
+          Fast fingers, no pressure.
         </div>
       `;
 
     this.containerEl.innerHTML = `
       ${floatingBackgroundHTML(0)}
 
+      <button id="btn-mute" aria-label="Toggle sound" style="
+        position:absolute;top:16px;right:16px;z-index:2;width:40px;height:40px;border-radius:12px;
+        background:${c.bgCard};border:1px solid ${c.border};display:flex;align-items:center;justify-content:center;
+        cursor:pointer;box-shadow:0 2px 8px rgba(139,126,116,0.12);font-size:16px;line-height:1;">🔊</button>
+
       <div style="position:relative;z-index:1;width:100%;max-width:340px;display:flex;flex-direction:column;
         align-items:center;gap:18px;text-align:center;">
 
-        ${logoTitle('TypeType', 30)}
-
-        <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:-4px;">
           ${HERO_KEY_NUMBERS.map((n, i) => heroKey(n, i)).join('')}
         </div>
 
+        ${logoTitle('TypeType', 34)}
+
         ${introHtml}
 
-        <div style="width:100%;display:flex;flex-direction:column;gap:14px;
+        <div style="width:100%;display:flex;flex-direction:column;gap:14px;margin-top:8px;
           animation:ddSpringIn 0.4s ease-out 0.55s both;">
           ${primaryButton('Continue with Google', 'btn-google')}
-
-          <div style="display:flex;align-items:center;gap:10px;width:100%;">
-            <div style="flex:1;height:1px;background:${c.border};"></div>
-            <span style="font-size:11px;color:${c.textMuted};">or</span>
-            <div style="flex:1;height:1px;background:${c.border};"></div>
-          </div>
-
-          <input id="nickname-input" maxlength="16" placeholder="Pick a nickname" style="
-            width:100%;padding:14px 16px;background:${c.bgCard};border:1px solid ${c.border};
-            border-radius:12px;color:${c.textPrimary};font-family:${theme.font.body};font-size:14px;box-sizing:border-box;
-            text-align:center;" />
-
           ${secondaryButton('Play as Guest', 'btn-guest')}
         </div>
       </div>
@@ -215,15 +203,19 @@ export class Preloader extends Phaser.Scene {
     });
 
     this.containerEl.querySelector('#btn-guest')?.addEventListener('click', async () => {
-      const input = this.containerEl.querySelector('#nickname-input') as HTMLInputElement;
-      const nickname = input?.value.trim();
-      if (!nickname) {
-        input?.focus();
-        return;
-      }
-      const identity = getOrCreateGuestIdentity(nickname);
+      // No nickname prompt on this screen anymore — auto-assign a
+      // "GuestXXXXX" name (matches the clean two-button reference design).
+      const identity = getOrCreateGuestIdentity();
       this.showSpinner('Loading…');
       await this.finishBoot(identity.userId);
+    });
+
+    let muted = false;
+    this.containerEl.querySelector('#btn-mute')?.addEventListener('click', (e) => {
+      muted = !muted;
+      (e.currentTarget as HTMLButtonElement).textContent = muted ? '🔇' : '🔊';
+      // Purely a visual toggle for now — not yet wired to AudioManager,
+      // which is instantiated per-scene rather than as a shared singleton.
     });
   }
 
