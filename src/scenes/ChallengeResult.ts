@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { theme, panel, primaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
+import { audioManager } from '../lib/audio';
+import { soundToggleHTML, bindSoundToggle } from '../lib/soundToggle';
 
 interface SceneData {
   testScore: number;
@@ -43,9 +45,10 @@ export class ChallengeResult extends Phaser.Scene {
     shell.id = 'challenge-result-ui';
     shell.className = 'dd-shell';
     shell.innerHTML = `<div class="dd-frame" id="challenge-result-frame" style="align-items:center;justify-content:center;
-      display:flex;flex-direction:column;gap:16px;padding:24px;font-family:${theme.font.body};"></div>`;
+      display:flex;flex-direction:column;gap:16px;padding:24px;font-family:${theme.font.body};position:relative;"></div>`;
     document.getElementById('game-container')?.appendChild(shell);
     this.containerEl = shell.querySelector('#challenge-result-frame') as HTMLDivElement;
+    audioManager.startMenuMusic();
     this.render();
   }
 
@@ -76,6 +79,7 @@ export class ChallengeResult extends Phaser.Scene {
     const accentColor = !hasChallengerRecord || won ? c.success : c.textSecondary;
 
     this.containerEl.innerHTML = `
+      ${soundToggleHTML()}
       <div style="width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;">
         <h1 style="font-family:${theme.font.display};font-size:22px;font-weight:800;color:${c.textPrimary};margin:0;">
           TypeType
@@ -94,6 +98,7 @@ export class ChallengeResult extends Phaser.Scene {
       </div>
     `;
 
+    bindSoundToggle(this.containerEl);
     this.containerEl.querySelector('#btn-challenge-cta')?.addEventListener('click', () => {
       this.containerEl?.closest('.dd-shell')?.remove();
       // Carries only display copy forward — never the raw score. Preloader

@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { generateEquation } from '../lib/equation';
 import { KEYPAD } from '../lib/keypad';
-import { AudioManager } from '../lib/audio';
+import { audioManager, type AudioManager } from '../lib/audio';
+import { soundToggleHTML, bindSoundToggle } from '../lib/soundToggle';
 import { theme, panel, label, primaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 
@@ -60,7 +61,7 @@ function infoRow(labelText: string, value: string, color: string) {
  */
 export class ChallengeTestRound extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
-  private audio = new AudioManager();
+  private audio: AudioManager = audioManager;
   private sceneData!: SceneData;
 
   private phase: Phase = 'countdown';
@@ -95,7 +96,7 @@ export class ChallengeTestRound extends Phaser.Scene {
     const shell = document.createElement('div');
     shell.id = 'challenge-test-ui';
     shell.className = 'dd-shell';
-    shell.innerHTML = `<div class="dd-frame" id="challenge-test-frame" style="background:${theme.color.bg};"></div>`;
+    shell.innerHTML = `<div class="dd-frame" id="challenge-test-frame" style="background:${theme.color.bg};position:relative;"></div>`;
     document.getElementById('game-container')?.appendChild(shell);
     this.containerEl = shell.querySelector('#challenge-test-frame') as HTMLDivElement;
     this.showCountdown();
@@ -123,8 +124,10 @@ export class ChallengeTestRound extends Phaser.Scene {
     }
 
     const c = theme.color;
+    audioManager.startMenuMusic();
 
     this.containerEl.innerHTML = `
+      ${soundToggleHTML()}
       <div style="flex:1;width:100%;padding:32px 20px;display:flex;flex-direction:column;
         align-items:center;justify-content:center;text-align:center;box-sizing:border-box;">
         ${label(this.stageLabel(), c.accentBright)}
@@ -135,6 +138,7 @@ export class ChallengeTestRound extends Phaser.Scene {
         </p>
       </div>
     `;
+    bindSoundToggle(this.containerEl);
 
     const valueEl = this.containerEl.querySelector('#countdown-value') as HTMLElement;
     let count = 3;
@@ -152,7 +156,7 @@ export class ChallengeTestRound extends Phaser.Scene {
           this.audio.playCountdownGo();
           valueEl.textContent = 'GO';
           this.time.delayedCall(400, () => {
-            this.audio.startMusic(this.stageInTier);
+            this.audio.stopMusic();
             this.showPlaying();
           });
         }
@@ -183,6 +187,7 @@ export class ChallengeTestRound extends Phaser.Scene {
           <h1 style="font-family:${theme.font.display};font-size:17px;font-weight:800;color:${c.textPrimary};margin:0;">
             TypeType
           </h1>
+          ${soundToggleHTML('btn-sound-toggle', true)}
         </div>
 
         <div style="margin-bottom:8px;flex-shrink:0;">${label(this.stageLabel(), c.textMuted)}</div>
@@ -233,6 +238,7 @@ export class ChallengeTestRound extends Phaser.Scene {
 
     this.renderEquation();
     this.updateInputDisplay();
+    bindSoundToggle(this.containerEl);
 
     const timerDisplay = this.containerEl.querySelector('#timer-display') as HTMLElement;
     timerDisplay.textContent = formatTimer(this.timeLeft);
@@ -395,8 +401,10 @@ export class ChallengeTestRound extends Phaser.Scene {
     const statusText = ok ? 'Correct!' : timeout ? "Time's up" : 'Not quite';
     const isLastRound = this.stageInTier >= TOTAL_ROUNDS;
     const btnLabel = isLastRound ? 'See My Score' : `Round ${this.stageInTier + 1}`;
+    audioManager.startMenuMusic();
 
     this.containerEl.innerHTML = `
+      ${soundToggleHTML()}
       <div style="flex:1;width:100%;padding:24px 20px;display:flex;flex-direction:column;
         align-items:center;justify-content:center;text-align:center;box-sizing:border-box;">
 
@@ -414,6 +422,7 @@ export class ChallengeTestRound extends Phaser.Scene {
         ${primaryButton(btnLabel, 'btn-next', 'max-width:320px;')}
       </div>
     `;
+    bindSoundToggle(this.containerEl);
 
     this.containerEl.querySelector('#btn-next')?.addEventListener('click', () => {
       this.audio.playClick();

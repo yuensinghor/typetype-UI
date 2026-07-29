@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { platform } from '../lib/standaloneAdapter';
 import { getIdentity } from '../game';
 import { buildInviteLink } from '../lib/identity';
-import { AudioManager } from '../lib/audio';
+import { AudioManager, audioManager } from '../lib/audio';
+import { soundToggleHTML, bindSoundToggle } from '../lib/soundToggle';
 import { mergeHighestUnlockedTier } from '../lib/ladderEngine';
 import type { ClearedTierSnapshot } from '../lib/ladderEngine';
 import { theme, panel, label, primaryButton, secondaryButton } from '../lib/theme';
@@ -47,7 +48,7 @@ export class GameOver extends Phaser.Scene {
 
   init(data: SceneData) {
     this.sceneData = data;
-    this.audio = data.audio ?? new AudioManager();
+    this.audio = data.audio ?? audioManager;
   }
 
   create() {
@@ -58,6 +59,7 @@ export class GameOver extends Phaser.Scene {
     shell.innerHTML = `<div class="dd-frame dd-scroll" id="gameover-frame"></div>`;
     document.getElementById('game-container')?.appendChild(shell);
     this.containerEl = shell.querySelector('#gameover-frame') as HTMLDivElement;
+    audioManager.startMenuMusic();
 
     if (this.sceneData.snapshot) {
       this.buildClearedUI(this.sceneData.snapshot);
@@ -193,7 +195,10 @@ export class GameOver extends Phaser.Scene {
     this.containerEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
         <h1 style="font-family:${theme.font.display};font-size:20px;font-weight:800;margin:0;">TypeType</h1>
-        ${label(hasLimitBreakAward ? 'Limit Break Cleared' : `Level ${TIER_NUMBER[snapshot.tier]} Cleared`, hasLimitBreakAward ? c.success : c.accentBright)}
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${label(hasLimitBreakAward ? 'Limit Break Cleared' : `Level ${TIER_NUMBER[snapshot.tier]} Cleared`, hasLimitBreakAward ? c.success : c.accentBright)}
+          ${soundToggleHTML('btn-sound-toggle', true)}
+        </div>
       </div>
 
       <div style="${panel('padding:20px 18px;')}display:flex;flex-direction:column;gap:14px;text-align:center;">
@@ -230,6 +235,7 @@ export class GameOver extends Phaser.Scene {
     `;
 
     this.bindFooterEvents(this.sceneData.unlockedTierReached);
+    bindSoundToggle(this.containerEl);
 
     this.containerEl.querySelector('#btn-share')?.addEventListener('click', () => {
       this.audio.playClick();
@@ -328,7 +334,10 @@ export class GameOver extends Phaser.Scene {
     this.containerEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
         <h1 style="font-family:${theme.font.display};font-size:20px;font-weight:800;margin:0;">TypeType</h1>
-        ${label('No Clear This Time', c.danger)}
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${label('No Clear This Time', c.danger)}
+          ${soundToggleHTML('btn-sound-toggle', true)}
+        </div>
       </div>
 
       <div style="${panel('padding:24px 20px;')}display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;">
@@ -356,6 +365,7 @@ export class GameOver extends Phaser.Scene {
     `;
 
     this.bindFooterEvents(this.sceneData.unlockedTierReached);
+    bindSoundToggle(this.containerEl);
   }
 
   private footerHTML(showInvite = true): string {

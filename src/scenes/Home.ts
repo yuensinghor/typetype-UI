@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { phaserGame, getIdentity } from '../game';
 import { platform } from '../lib/standaloneAdapter';
-import { AudioManager } from '../lib/audio';
+import { audioManager, type AudioManager } from '../lib/audio';
+import { soundToggleHTML, bindSoundToggle } from '../lib/soundToggle';
 import { buildInviteLink, signOut } from '../lib/identity';
 import { theme, panel, label, logoTitle, primaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
@@ -72,7 +73,7 @@ function injectHomeStyles() {
 export class Home extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
   private trackEl!: HTMLDivElement;
-  private audio = new AudioManager();
+  private audio: AudioManager = audioManager;
   private auth: AuthState = { isLoggedIn: false, unlocks: { clearedAllTiers: false, distinctDaysPlayed: 0 } };
   private activePage = 0;
 
@@ -113,6 +114,7 @@ export class Home extends Phaser.Scene {
         padding:14px 16px 6px;flex-shrink:0;font-family:${theme.font.body};color:${c.textPrimary};">
         ${logoTitle('TypeType', 22, false)}
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          ${soundToggleHTML('btn-sound-toggle', true)}
           <button id="btn-logout" aria-label="Log out" style="
             display:none;background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;
             align-items:center;justify-content:center;font-size:16px;cursor:pointer;flex-shrink:0;">
@@ -130,20 +132,20 @@ export class Home extends Phaser.Scene {
         <div class="home-page" id="page-challenge_categories"></div>
         <div class="home-page" id="page-daily_challenge"></div>
         <div class="home-page" id="page-endless"></div>
-        <div class="home-page" id="page-levels"></div>
       </div>
 
       <div style="display:flex;justify-content:center;gap:6px;padding:8px 0 12px;flex-shrink:0;">
-        ${[0, 1, 2, 3].map(i => `<div class="home-dot${i === 0 ? ' active' : ''}" data-dot="${i}"></div>`).join('')}
+        ${[0, 1, 2].map(i => `<div class="home-dot${i === 0 ? ' active' : ''}" data-dot="${i}"></div>`).join('')}
       </div>
     `;
 
     this.trackEl = this.containerEl.querySelector('#home-track') as HTMLDivElement;
+    bindSoundToggle(this.containerEl);
+    audioManager.startMenuMusic();
 
     this.renderChallengeCategoriesPage();
     this.renderDailyChallengePage({ allowed: false, reason: 'locked' }, this.auth);
     this.renderEndlessPage({ allowed: false, reason: 'locked' }, this.auth);
-    this.renderLevelsPage(this.auth);
 
     this.bindShellEvents();
   }
@@ -372,10 +374,15 @@ export class Home extends Phaser.Scene {
     });
   }
 
-  // ── Page 4: Levels — not built yet, always blurred+teased ──
+  // ── Page 4: Levels — PARKED. Phase 4 isn't built yet (Levels.ts is still
+  // a placeholder), so this page is no longer added to the carousel at all
+  // rather than shown as a locked/teased slot. The function is left intact,
+  // unused, so re-enabling it later is just re-adding the page-levels div,
+  // the 4th dot, and these two call sites.
 
   private renderLevelsPage(auth: AuthState) {
     const page = this.containerEl.querySelector('#page-levels') as HTMLElement;
+    if (!page) return;
     page.innerHTML = renderLockedPageHTML(
       'Levels',
       '100+ bite-sized stages. Collect stars, unlock keypad skins.',
@@ -401,7 +408,6 @@ export class Home extends Phaser.Scene {
     const endlessAccess = canAccessMode('endless', this.auth);
     this.renderDailyChallengePage(dailyAccess, this.auth);
     this.renderEndlessPage(endlessAccess, this.auth);
-    this.renderLevelsPage(this.auth);
   }
 }
 

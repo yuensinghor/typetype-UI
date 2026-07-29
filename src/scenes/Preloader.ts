@@ -35,12 +35,22 @@ export class Preloader extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
   private challengeContext?: ChallengeContext;
 
+  // Guards against the async boot race: if the scene is torn down (or a
+  // newer boot attempt supersedes an older one), any in-flight promise
+  // continuation must no-op instead of mutating a stale/detached DOM tree.
+  // Without this, a slow network + a timeout + a Retry tap could leave two
+  // independent boot() calls both able to touch containerEl — which is how
+  // stray elements like #btn-mute were surviving into later scenes.
+  private destroyed = false;
+  private bootToken = 0;
+
   constructor() {
     super('Preloader');
   }
 
   init(data?: PreloaderData) {
     this.challengeContext = data?.challengeContext;
+    this.destroyed = false;
   }
 
   create() {
@@ -55,6 +65,11 @@ export class Preloader extends Phaser.Scene {
 
     this.showSpinner('Loading…');
     this.routeOrBoot();
+  }
+
+  shutdown() {
+    this.destroyed = true;
+    this.containerEl?.closest('.dd-shell')?.remove();
   }
 
   /** Detours first-time anonymous visitors on a valid, not-yet-seen invite
@@ -75,19 +90,21 @@ export class Preloader extends Phaser.Scene {
   private bootWithTimeout() {
     const TIMEOUT_MS = 10000;
     let settled = false;
+    const token = ++this.bootToken; // this attempt "wins" only while it's still the latest
+    const isCurrent = () => !this.destroyed && token === this.bootToken;
 
     const timeoutId = setTimeout(() => {
-      if (settled) return;
+      if (settled || !isCurrent()) return;
       settled = true;
       this.showError('This is taking longer than expected.', 'Timed out waiting for the server to respond.');
     }, TIMEOUT_MS);
 
-    this.boot()
+    this.boot(isCurrent)
       .then(() => { settled = true; clearTimeout(timeoutId); })
       .catch((err) => {
-        if (settled) return;
-        settled = true;
         clearTimeout(timeoutId);
+        if (settled || !isCurrent()) return;
+        settled = true;
         console.error('[DigitDash] Boot failed:', err);
         this.showError('Something went wrong loading the game.', err?.message ?? String(err));
       });
@@ -124,19 +141,20 @@ export class Preloader extends Phaser.Scene {
     `;
   }
 
-  private async boot() {
+  private async boot(isCurrent: () => boolean) {
     if (!isSupabaseConfigured) {
       throw new Error(supabaseConfigError ?? 'Server is not configured.');
     }
 
     const identity = await resolveIdentity();
+    if (!isCurrent()) return; // superseded (timed out + retried, or scene torn down) while awaiting
 
     if (identity.isGuest && !hasGuestNickname()) {
       this.showLoginChoice();
       return;
     }
 
-    await this.finishBoot(identity.userId);
+    await this.finishBoot(identity.userId, isCurrent);
   }
 
   private showLoginChoice() {
@@ -219,15 +237,18 @@ export class Preloader extends Phaser.Scene {
     });
   }
 
-  private async finishBoot(userId: string) {
+  private async finishBoot(userId: string, isCurrent: () => boolean = () => !this.destroyed) {
     this.showSpinner('Loading…');
     try {
       const identity = await resolveIdentity();
+      if (!isCurrent()) return;
+
       phaserGame.registry.set('identity', identity);
       if (!identity.isGuest) {
         await platform.syncQuitRetryUnlock(identity.userId);
         await recordLoginDayIfNeeded(identity.userId);
       }
+      if (!isCurrent()) return;
 
       const saved = await platform.loadProgress<{
         highestUnlockedTier: Tier;
@@ -235,6 +256,7 @@ export class Preloader extends Phaser.Scene {
         hasLimitBreakAward: boolean;
         clearedBossBasic: boolean;
       }>(identity.userId, 'ladder_progress');
+      if (!isCurrent()) return;
 
       phaserGame.registry.set('highestUnlockedTier', saved?.highestUnlockedTier ?? 'easy');
       phaserGame.registry.set('tierBadges', saved?.badges ?? {});
@@ -242,11 +264,13 @@ export class Preloader extends Phaser.Scene {
       phaserGame.registry.set('clearedBossBasic', saved?.clearedBossBasic ?? false);
 
       const ladder = await platform.fetchLadder();
+      if (!isCurrent()) return;
       phaserGame.registry.set('ladder', ladder);
 
       this.containerEl.closest('.dd-shell')?.remove();
       this.scene.start('Home');
     } catch (err: any) {
+      if (!isCurrent()) return;
       console.error('[DigitDash] finishBoot failed:', err);
       this.showError('Something went wrong loading the game.', err?.message ?? String(err));
     }

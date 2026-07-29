@@ -114,7 +114,13 @@ export class EndlessMode extends Phaser.Scene {
     document.getElementById('game-container')?.appendChild(shell);
     this.containerEl = shell.querySelector('#endless-frame') as HTMLDivElement;
 
-    this.showLanding();
+    // Home's Endless carousel card already shows the player's best run and
+    // is the actual landing/confirmation step — tapping its Start button
+    // should begin the run immediately. Going through this scene's own
+    // 'landing' phase again re-fetched and re-displayed the same best-score
+    // card a second time, which read as "shows old score, make me choose
+    // and start again."
+    this.showCountdown();
   }
 
   shutdown() {

@@ -155,7 +155,12 @@ export class DailyChallenge extends Phaser.Scene {
       this.challengeDate = daily.challengeDate;
       this.equationSet = daily.equationSet;
       this.speedBenchmarkMs = daily.speedBenchmarkMs;
-      this.showLanding();
+      // Home's Daily Challenge carousel card already shows the player's
+      // best-today score and is the real landing/confirmation step —
+      // tapping its Start button should begin the round immediately once
+      // today's equation set is loaded, not re-show the same best-score
+      // card a second time behind another Start tap.
+      this.showCountdown();
     } catch (err) {
       console.error('[TypeType] loadTodaysChallenge failed:', err);
       this.renderError();

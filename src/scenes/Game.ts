@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { AudioManager } from '../lib/audio';
+import { audioManager, type AudioManager } from '../lib/audio';
+import { soundToggleHTML, bindSoundToggle } from '../lib/soundToggle';
 import { generateEquation, getTimeLimit, getEndlessTimeLimit, LIMIT_BREAK_LIMITS } from '../lib/equation';
 import { LadderEngine, type LadderState } from '../lib/ladderEngine';
 import { platform } from '../lib/standaloneAdapter';
@@ -54,7 +55,7 @@ export class Game extends Phaser.Scene {
   }
 
   init(data: SceneData) {
-    this.audio = data.audio ?? new AudioManager();
+    this.audio = data.audio ?? audioManager;
     this.isQuitModalOpen = false;
     this.startTier = data.startTier;
     this.engine = new LadderEngine(data.startTier);
@@ -66,7 +67,7 @@ export class Game extends Phaser.Scene {
     const shell = document.createElement('div');
     shell.id = 'game-ui';
     shell.className = 'dd-shell';
-    shell.innerHTML = `<div class="dd-frame" id="game-frame" style="background:${theme.color.bg};"></div>`;
+    shell.innerHTML = `<div class="dd-frame" id="game-frame" style="background:${theme.color.bg};position:relative;"></div>`;
     document.getElementById('game-container')?.appendChild(shell);
     this.containerEl = shell.querySelector('#game-frame') as HTMLDivElement;
     this.showCountdown();
@@ -92,8 +93,10 @@ export class Game extends Phaser.Scene {
     const s = this.engine.getState();
     const c = theme.color;
     const g = s.phase === 'limit_break';
+    audioManager.startMenuMusic();
 
     this.containerEl.innerHTML = `
+      ${soundToggleHTML()}
       <div style="flex:1;width:100%;padding:32px 20px;display:flex;flex-direction:column;
         align-items:center;justify-content:center;text-align:center;box-sizing:border-box;">
         ${label(this.stageLabel(s), g ? c.warningText : c.textMuted)}
@@ -104,6 +107,7 @@ export class Game extends Phaser.Scene {
         </p>
       </div>
     `;
+    bindSoundToggle(this.containerEl);
 
     const valueEl = this.containerEl.querySelector('#countdown-value') as HTMLElement;
     let count = 3;
@@ -121,7 +125,7 @@ export class Game extends Phaser.Scene {
           this.audio.playCountdownGo();
           valueEl.textContent = g ? 'GO!' : 'GO';
           this.time.delayedCall(400, () => {
-            this.audio.startMusic(s.stageInTier);
+            this.audio.stopMusic();
             this.showPlaying();
           });
         }
@@ -174,9 +178,12 @@ export class Game extends Phaser.Scene {
           <h1 style="font-family:${theme.font.display};font-size:17px;font-weight:800;color:${g ? c.warningText : c.textPrimary};margin:0;">
             TypeType
           </h1>
-          <button id="btn-quit" style="padding:7px 14px;background:transparent;
-            border:1px solid ${c.danger};color:${c.danger};border-radius:8px;font-size:11px;
-            font-weight:700;cursor:pointer;">Quit</button>
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${soundToggleHTML('btn-sound-toggle', true)}
+            <button id="btn-quit" style="padding:7px 14px;background:transparent;
+              border:1px solid ${c.danger};color:${c.danger};border-radius:8px;font-size:11px;
+              font-weight:700;cursor:pointer;">Quit</button>
+          </div>
         </div>
 
         <div style="margin-bottom:8px;flex-shrink:0;">${label(stageLabel, g ? c.warningText : c.textMuted)}</div>
@@ -230,6 +237,7 @@ export class Game extends Phaser.Scene {
 
     const timerDisplay = this.containerEl.querySelector('#timer-display') as HTMLElement;
     timerDisplay.textContent = formatTimer(this.timeLeft);
+    bindSoundToggle(this.containerEl);
 
     this.containerEl.querySelector('#btn-quit')?.addEventListener('click', () => {
       this.audio.playClick();
@@ -496,7 +504,9 @@ export class Game extends Phaser.Scene {
       btnLabel = `Round ${state.stageInTier}`;
     }
 
+    audioManager.startMenuMusic();
     this.containerEl.innerHTML = `
+      ${soundToggleHTML()}
       <div style="flex:1;width:100%;padding:24px 20px;display:flex;flex-direction:column;
         align-items:center;justify-content:center;text-align:center;box-sizing:border-box;">
 
@@ -514,6 +524,7 @@ export class Game extends Phaser.Scene {
         ${primaryButton(btnLabel, 'btn-next', 'max-width:320px;')}
       </div>
     `;
+    bindSoundToggle(this.containerEl);
 
     this.containerEl.querySelector('#btn-next')?.addEventListener('click', () => {
       this.audio.playClick();

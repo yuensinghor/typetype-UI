@@ -3,6 +3,8 @@ import { platform } from '../lib/standaloneAdapter';
 import { consumePendingInviteCode, markChallengeSeen } from '../lib/identity';
 import { theme, primaryButton, secondaryButton, panel } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
+import { audioManager } from '../lib/audio';
+import { soundToggleHTML, bindSoundToggle } from '../lib/soundToggle';
 import type { ChallengerSnapshot } from '../shared/types';
 
 const GIVEUP_TAUNTS = [
@@ -38,10 +40,11 @@ export class ChallengeLanding extends Phaser.Scene {
     el.id = 'challenge-ui';
     el.className = 'dd-shell';
     el.innerHTML = `<div class="dd-frame" id="challenge-frame" style="align-items:center;justify-content:center;
-      display:flex;flex-direction:column;gap:16px;padding:24px;font-family:${theme.font.body};"></div>`;
+      display:flex;flex-direction:column;gap:16px;padding:24px;font-family:${theme.font.body};position:relative;"></div>`;
     document.getElementById('game-container')?.appendChild(el);
     this.containerEl = el.querySelector('#challenge-frame') as HTMLDivElement;
 
+    audioManager.startMenuMusic();
     this.showSpinner('Loading challenge…');
     this.resolveChallenge();
   }
@@ -92,6 +95,7 @@ export class ChallengeLanding extends Phaser.Scene {
       : `Think you've got fast fingers?`;
 
     this.containerEl.innerHTML = `
+      ${soundToggleHTML()}
       <div style="width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;">
         <h1 style="font-family:${theme.font.display};font-size:24px;font-weight:800;color:${c.textPrimary};margin:0;">
           TypeType
@@ -111,6 +115,7 @@ export class ChallengeLanding extends Phaser.Scene {
       </div>
     `;
 
+    bindSoundToggle(this.containerEl);
     const giveUpBtn = this.containerEl.querySelector('#btn-challenge-giveup') as HTMLButtonElement;
     const startBtn = this.containerEl.querySelector('#btn-challenge-start') as HTMLButtonElement;
     const originalGiveUpText = giveUpBtn.textContent ?? 'Give up';

@@ -50,6 +50,9 @@ export class StandaloneAdapter implements PlatformAdapter {
   async fetchSquad(userId: string, invitedByUserId?: string | null, limit = 50): Promise<SquadEntry[]> {
     try {
       const ids = new Set<string>();
+      ids.add(userId); // always include self — lbRow's isMe highlight depends on this,
+      // and without it a player with zero connected friends never saw their
+      // own score here at all (the query bailed out on an empty id set below).
 
       const { data: invitees } = await supabase
         .from('profiles')

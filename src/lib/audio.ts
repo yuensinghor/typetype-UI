@@ -2,13 +2,58 @@
  * Minimal WebAudio synth-based sound manager. No external audio files required,
  * which keeps the PWA installable/offline-friendly out of the box. Swap in
  * real audio files later by pointing these methods at an <audio> pool instead.
+ *
+ * Exported as a single shared instance (`audioManager`, below) rather than
+ * one-per-scene, so the mute toggle and "is menu music currently playing"
+ * state stay correct across scene.start() transitions without every scene
+ * needing to manually pass `{ audio: this.audio }` around.
  */
+const MUTE_KEY = 'dd_sound_muted';
+
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private soundEnabled = true;
   private musicEnabled = true;
   private musicTimer: number | null = null;
   private musicGain: GainNode | null = null;
+  // Tracks whether menu music *should* be playing right now, so unmuting
+  // resumes it and re-entering a menu after gameplay restarts it cleanly.
+  private wantsMenuMusic = false;
+
+  constructor() {
+    const muted = typeof localStorage !== 'undefined' && localStorage.getItem(MUTE_KEY) === '1';
+    this.soundEnabled = !muted;
+    this.musicEnabled = !muted;
+  }
+
+  isMuted(): boolean {
+    return !this.soundEnabled;
+  }
+
+  /** Flips mute state, persists it, and pauses/resumes menu music to match
+   *  without losing track of whether menu music *should* be playing.
+   *  Returns the new muted state (true = now muted). */
+  toggleMute(): boolean {
+    this.soundEnabled = !this.soundEnabled;
+    this.musicEnabled = this.soundEnabled;
+    try { localStorage.setItem(MUTE_KEY, this.soundEnabled ? '0' : '1'); } catch { /* ignore */ }
+
+    if (!this.soundEnabled) {
+      this.pauseMusicPlayback();
+    } else if (this.wantsMenuMusic) {
+      this.startMenuMusic();
+    }
+    return !this.soundEnabled;
+  }
+
+  /** Stops the audible loop without forgetting we're still "in a menu" —
+   *  used only by toggleMute(), so unmuting resumes correctly. */
+  private pauseMusicPlayback() {
+    if (this.musicTimer !== null) {
+      clearInterval(this.musicTimer);
+      this.musicTimer = null;
+    }
+  }
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
@@ -48,16 +93,25 @@ export class AudioManager {
     });
   }
 
-  startMusic(_seed: number) {
+  /**
+   * Happy, upbeat looping menu theme — a major-key arpeggio (C major
+   * pentatonic-ish run) instead of the old minor-key drone. Meant to loop
+   * continuously on every non-gameplay screen (Preloader, Home, results,
+   * landing pages) and stop the instant a typing round actually starts,
+   * where only keypad/SFX sounds should be heard.
+   */
+  startMenuMusic() {
+    this.wantsMenuMusic = true;
     if (!this.musicEnabled) return;
-    this.stopMusic();
+    this.pauseMusicPlayback();
     try {
       const ctx = this.getCtx();
       const gain = ctx.createGain();
-      gain.gain.value = 0.015;
+      gain.gain.value = 0.02;
       gain.connect(ctx.destination);
       this.musicGain = gain;
-      const notes = [220, 246, 277, 220];
+      // C major pentatonic, playful up-down bounce.
+      const notes = [523, 659, 784, 659, 587, 784, 988, 784];
       let i = 0;
       this.musicTimer = window.setInterval(() => {
         if (!this.musicEnabled) return;
@@ -66,15 +120,22 @@ export class AudioManager {
         osc.frequency.value = notes[i % notes.length];
         osc.connect(gain);
         osc.start();
-        osc.stop(ctx.currentTime + 0.2);
+        osc.stop(ctx.currentTime + 0.22);
         i++;
-      }, 260);
+      }, 240);
     } catch {
       /* ignore */
     }
   }
 
+  /** @deprecated kept as an alias so any leftover call sites still compile;
+   *  prefer startMenuMusic() — gameplay itself should stay music-free. */
+  startMusic(_seed: number) {
+    this.startMenuMusic();
+  }
+
   stopMusic() {
+    this.wantsMenuMusic = false;
     if (this.musicTimer !== null) {
       clearInterval(this.musicTimer);
       this.musicTimer = null;
@@ -87,3 +148,7 @@ export class AudioManager {
     if (!v) this.stopMusic();
   }
 }
+
+/** Shared instance — import this everywhere instead of `new AudioManager()`
+ *  so mute state and menu-music playback stay consistent across scenes. */
+export const audioManager = new AudioManager();
