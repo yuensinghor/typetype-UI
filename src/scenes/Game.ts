@@ -64,6 +64,16 @@ export class Game extends Phaser.Scene {
   }
 
   create() {
+    // Phaser does NOT auto-invoke a method named `shutdown` on Scene
+    // subclasses — only init/preload/create/update/render are auto-wired
+    // (confirmed directly in node_modules/phaser/src/scene/SceneManager.js,
+    // the `defaults` array). Without this explicit binding, shutdown()
+    // below never ran: old '.dd-shell' DOM elements were never removed,
+    // old scenes kept their music playing and keydown listeners attached
+    // forever, and every screen transition left the previous screen's UI
+    // (and audio) stacked underneath the new one. This line is what
+    // actually makes that cleanup happen.
+    this.events.once('shutdown', this.shutdown, this);
     injectGlobalStyles();
     const shell = document.createElement('div');
     shell.id = 'game-ui';

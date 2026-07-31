@@ -40,6 +40,9 @@ export class ChallengeResult extends Phaser.Scene {
   }
 
   create() {
+    // Phaser doesn't auto-call a method named `shutdown` — must bind explicitly
+    // (see Game.ts for the full explanation of why this matters everywhere).
+    this.events.once('shutdown', this.shutdown, this);
     injectGlobalStyles();
     const shell = document.createElement('div');
     shell.id = 'challenge-result-ui';

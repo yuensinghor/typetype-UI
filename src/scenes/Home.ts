@@ -12,6 +12,30 @@ import { showIOSInstallInstructions } from '../lib/installUI';
 import { fetchPlayerUnlocks } from '../lib/playerUnlocks';
 import { TIER_ORDER, type LadderEntry, type SquadEntry, type Tier, type RankOvertake } from '../shared/types';
 
+const ICON_DOWNLOAD = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+  <polyline points="7 10 12 15 17 10"></polyline>
+  <line x1="12" y1="15" x2="12" y2="3"></line>
+</svg>`;
+
+const ICON_LOGOUT = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+  <polyline points="16 17 21 12 16 7"></polyline>
+  <line x1="21" y1="12" x2="9" y2="12"></line>
+</svg>`;
+
+const ICON_TROPHY = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+  <path d="M4 22h16"></path>
+  <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path>
+  <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path>
+  <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+</svg>`;
+
 const TIER_LABELS: Record<Tier, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', boss: 'Boss' };
 const TIER_NUMBER: Record<Tier, number> = { easy: 1, medium: 2, hard: 3, boss: 4 };
 
@@ -78,6 +102,8 @@ export class Home extends Phaser.Scene {
   private audio: AudioManager = audioManager;
   private auth: AuthState = { isLoggedIn: false, unlocks: { clearedAllTiers: false, distinctDaysPlayed: 0 } };
   private activePage = 0;
+  private onInstallReady?: () => void;
+  private onAppInstalled?: () => void;
 
   constructor() {
     super('Home');
@@ -88,6 +114,9 @@ export class Home extends Phaser.Scene {
   }
 
   create() {
+    // Phaser doesn't auto-call a method named `shutdown` — must bind explicitly
+    // (see Game.ts for the full explanation of why this matters everywhere).
+    this.events.once('shutdown', this.shutdown, this);
     injectGlobalStyles();
     injectHomeStyles();
     this.buildShell();
@@ -96,6 +125,8 @@ export class Home extends Phaser.Scene {
   }
 
   shutdown() {
+    if (this.onInstallReady) window.removeEventListener('dd-install-ready', this.onInstallReady);
+    if (this.onAppInstalled) window.removeEventListener('appinstalled', this.onAppInstalled);
     this.containerEl?.closest('.dd-shell')?.remove();
   }
 
@@ -115,23 +146,18 @@ export class Home extends Phaser.Scene {
       <div style="display:flex;align-items:center;justify-content:space-between;
         padding:14px 16px 6px;flex-shrink:0;font-family:${theme.font.body};color:${c.textPrimary};">
         ${logoTitle('TypeType', 22, false)}
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;" id="header-icons">
           ${soundToggleHTML('btn-sound-toggle', true)}
-          ${canOfferInstall() ? `
-          <button id="btn-install" aria-label="Install app" style="
-            background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;
-            display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;flex-shrink:0;">
-            📲
-          </button>` : ''}
+          ${canOfferInstall() ? this.installButtonHTML() : ''}
           <button id="btn-logout" aria-label="Log out" style="
             display:none;background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;
-            align-items:center;justify-content:center;font-size:16px;cursor:pointer;flex-shrink:0;">
-            🚪
+            align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:${c.textPrimary};">
+            ${ICON_LOGOUT}
           </button>
           <button id="btn-achievements" aria-label="Achievements" style="
             background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;
-            display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;flex-shrink:0;">
-            🏆
+            display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:${c.textPrimary};">
+            ${ICON_TROPHY}
           </button>
         </div>
       </div>
@@ -158,7 +184,16 @@ export class Home extends Phaser.Scene {
     this.bindShellEvents();
   }
 
-  private bindShellEvents() {
+  private installButtonHTML(): string {
+    const c = theme.color;
+    return `<button id="btn-install" aria-label="Install app" style="
+      background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;
+      display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:${c.textPrimary};">
+      ${ICON_DOWNLOAD}
+    </button>`;
+  }
+
+  private bindInstallButton() {
     this.containerEl.querySelector('#btn-install')?.addEventListener('click', async () => {
       this.audio.playClick();
       const btn = this.containerEl.querySelector('#btn-install');
@@ -169,13 +204,35 @@ export class Home extends Phaser.Scene {
       const accepted = await promptInstall();
       if (accepted) btn?.remove();
     });
+  }
+
+  private bindShellEvents() {
+    this.bindInstallButton();
+
+    // beforeinstallprompt can fire after this header already rendered (it's
+    // async and not guaranteed to resolve before Home boots) — when that
+    // happens, canOfferInstall() was false at render time and the button
+    // never made it into the initial HTML. Listen for the retroactive
+    // signal and insert it then, instead of the icon staying missing for
+    // the rest of the session.
+    this.onInstallReady = () => {
+      if (this.containerEl?.querySelector('#btn-install')) return;
+      if (!canOfferInstall()) return;
+      const group = this.containerEl?.querySelector('#header-icons');
+      const logoutBtn = group?.querySelector('#btn-logout');
+      if (!group || !logoutBtn) return;
+      logoutBtn.insertAdjacentHTML('beforebegin', this.installButtonHTML());
+      this.bindInstallButton();
+    };
+    window.addEventListener('dd-install-ready', this.onInstallReady);
 
     // The native install dialog can also be accepted/dismissed outside our
     // button (e.g. browser's own UI on some platforms) — either way, once
     // the app is actually installed, drop the icon everywhere it's mounted.
-    window.addEventListener('appinstalled', () => {
+    this.onAppInstalled = () => {
       this.containerEl?.querySelector('#btn-install')?.remove();
-    });
+    };
+    window.addEventListener('appinstalled', this.onAppInstalled);
 
     this.containerEl.querySelector('#btn-achievements')?.addEventListener('click', () => {
       this.audio.playClick();

@@ -30,6 +30,11 @@ export function initInstallPromptCapture(): void {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e as BeforeInstallPromptEvent;
+    // beforeinstallprompt fires asynchronously, sometimes after a scene has
+    // already built its header HTML and evaluated canOfferInstall() as
+    // false at that moment — this event lets already-mounted UI react and
+    // show the button retroactively instead of missing it for the session.
+    window.dispatchEvent(new Event('dd-install-ready'));
   });
 
   window.addEventListener('appinstalled', () => {
