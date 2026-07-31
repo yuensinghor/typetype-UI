@@ -5,6 +5,7 @@ import { generateEquation, getTimeLimit, getEndlessTimeLimit, LIMIT_BREAK_LIMITS
 import { LadderEngine, type LadderState } from '../lib/ladderEngine';
 import { platform } from '../lib/standaloneAdapter';
 import { phaserGame, getIdentity } from '../game';
+import { buildInviteLink } from '../lib/identity';
 import { theme, panel, label, primaryButton, secondaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { KEYPAD } from '../lib/keypad';
@@ -344,7 +345,7 @@ export class Game extends Phaser.Scene {
         </div>
         <p style="font-size:12.5px;color:${c.textSecondary};line-height:1.7;margin:0;">
           ${needsAd
-            ? 'Watch a short ad to unlock unlimited quits and retries, for good.'
+            ? 'Share TypeType with a friend to unlock unlimited quits and retries, for good.'
             : `You'll lose progress on this level.<br><span style="color:${c.textMuted};">${freeLeft} free ${freeLeft === 1 ? 'retry' : 'retries'} left.</span>`}
         </p>
         <div style="width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -355,7 +356,7 @@ export class Game extends Phaser.Scene {
           <button id="btn-modal-quit" style="padding:12px 0;background:${c.dangerDim};
             border:1px solid ${c.danger};border-radius:10px;color:${c.danger};font-family:${theme.font.display};
             font-weight:700;font-size:13px;cursor:pointer;">
-            ${needsAd ? 'Watch Ad' : 'Quit'}
+            ${needsAd ? 'Share to Unlock' : 'Quit'}
           </button>
         </div>
       </div>
@@ -377,23 +378,65 @@ export class Game extends Phaser.Scene {
     btnQuit.addEventListener('click', async () => {
       this.audio.playClick();
       if (needsAd) {
-        btnQuit.textContent = 'Loading…';
-        btnQuit.disabled = true;
-        const granted = await platform.showRewardedAd();
-        if (granted) platform.grantUnlimitedQuitRetry(userId);
-        modal.remove();
-        if (granted) this.quitToLobby();
-        else {
-          this.isQuitModalOpen = false;
-          this.lastTime = performance.now();
-          this.bindKeyboard();
-        }
+        await this.handleShareToUnlock(btnQuit, modal, userId);
         return;
       }
       if (!unlimited) platform.consumeFreeQuit(userId);
       modal.remove();
       this.quitToLobby();
     });
+  }
+
+  // Swapped out the old "watch a rewarded ad" unlock for a growth-focused
+  // "share with a friend" unlock — priority right now is player acquisition,
+  // not ad revenue. Native share sheet where available (its resolved promise
+  // is a reasonable signal of real intent to send); clipboard-copy fallback
+  // grants immediately since there's no completion signal to wait on there.
+  private async handleShareToUnlock(btnQuit: HTMLButtonElement, modal: HTMLElement, userId: string) {
+    const identity = getIdentity();
+    const inviteCode = identity?.inviteCode;
+    if (!inviteCode) {
+      // No invite code to share (shouldn't normally happen) — just let them
+      // keep playing rather than dead-ending on a broken share button.
+      modal.remove();
+      this.isQuitModalOpen = false;
+      this.lastTime = performance.now();
+      this.bindKeyboard();
+      return;
+    }
+
+    const link = buildInviteLink(inviteCode);
+    const shareData = {
+      title: 'TypeType',
+      text: 'Think you can beat my time on TypeType? Race me:',
+      url: link,
+    };
+
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share(shareData);
+        platform.grantUnlimitedQuitRetry(userId);
+        modal.remove();
+        this.quitToLobby();
+      } catch {
+        // User cancelled the share sheet — stay in the modal, don't grant.
+      }
+      return;
+    }
+
+    // No native share support (most desktop browsers): copy the link and
+    // grant right away, since there's no reliable "share completed" signal.
+    try {
+      await navigator.clipboard.writeText(link);
+      btnQuit.textContent = 'Link copied!';
+    } catch {
+      prompt('Copy your invite link and send it to a friend:', link);
+    }
+    platform.grantUnlimitedQuitRetry(userId);
+    setTimeout(() => {
+      modal.remove();
+      this.quitToLobby();
+    }, 700);
   }
 
   // ── Input handling ────────────────────────────────────────────────────

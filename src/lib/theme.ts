@@ -61,6 +61,21 @@ export function label(text: string, color: string = theme.color.textSecondary): 
     letter-spacing:0.04em;text-transform:uppercase;color:${color};">${text}</span>`;
 }
 
+/** Small round avatar for leaderboard rows — Google photo when we have one,
+ *  otherwise a flat initial-letter circle so rows don't jump in height. */
+export function avatarHTML(username: string, avatarUrl?: string | null, size = 22): string {
+  const c = theme.color;
+  const rawInitial = username?.trim()?.[0] || '?';
+  const initial = /[a-zA-Z0-9]/.test(rawInitial) ? rawInitial.toUpperCase() : '?';
+  const base = `width:${size}px;height:${size}px;border-radius:50%;flex-shrink:0;`;
+  if (avatarUrl) {
+    return `<img src="${avatarUrl}" alt="" style="${base}object-fit:cover;background:${c.bgCard};"
+      referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${initial}',style:'${base}display:flex;align-items:center;justify-content:center;background:${c.accentDim};color:${c.accent};font-size:${Math.round(size * 0.5)}px;font-weight:700;'}))" />`;
+  }
+  return `<span style="${base}display:flex;align-items:center;justify-content:center;
+    background:${c.accentDim};color:${c.accent};font-size:${Math.round(size * 0.5)}px;font-weight:700;">${initial}</span>`;
+}
+
 export function badge(text: string, tone: 'go' | 'stop' | 'wait' = 'go'): string {
   const color =
     tone === 'go' ? theme.color.success : tone === 'stop' ? theme.color.danger : theme.color.warningText;

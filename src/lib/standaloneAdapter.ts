@@ -24,6 +24,7 @@ export class StandaloneAdapter implements PlatformAdapter {
         .from('ladder_leaderboard_ranked')
         .select('*')
         .order('score', { ascending: false })
+        .order('best_total_time_ms', { ascending: true })
         .limit(limit);
 
       if (error) {
