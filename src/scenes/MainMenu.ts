@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { phaserGame, getIdentity } from '../game';
-import { AudioManager } from '../lib/audio';
+import { audioManager, type AudioManager } from '../lib/audio';
 import { theme, panel, label, logoTitle } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { renderInstallButton } from '../lib/installUI';
@@ -24,7 +24,7 @@ const DEFAULT_UNLOCKS: PlayerUnlocks = {
 
 export class MainMenu extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
-  private audio = new AudioManager();
+  private audio: AudioManager = audioManager;
 
   constructor() {
     super('MainMenu');

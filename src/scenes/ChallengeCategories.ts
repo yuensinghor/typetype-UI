@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { phaserGame, getIdentity } from '../game';
 import { platform } from '../lib/standaloneAdapter';
-import { AudioManager } from '../lib/audio';
+import { audioManager, type AudioManager } from '../lib/audio';
 import { buildInviteLink } from '../lib/identity';
 import { theme, panel, label, logoTitle, primaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
@@ -33,7 +33,7 @@ const TIER_LABEL_TEXT_COLORS: Record<Tier, string> = {
  */
 export class ChallengeCategories extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
-  private audio = new AudioManager();
+  private audio: AudioManager = audioManager;
 
   constructor() {
     super('ChallengeCategories');

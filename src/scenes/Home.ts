@@ -7,6 +7,8 @@ import { buildInviteLink, signOut } from '../lib/identity';
 import { theme, panel, label, logoTitle, primaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { canAccessMode, type AuthState, type AccessResult, DAILY_CHALLENGE_DAYS_REQUIRED, ENDLESS_LEVELS_DAYS_REQUIRED } from '../lib/modeAccess';
+import { canOfferInstall, promptInstall, isIOS } from '../lib/installPrompt';
+import { showIOSInstallInstructions } from '../lib/installUI';
 import { fetchPlayerUnlocks } from '../lib/playerUnlocks';
 import { TIER_ORDER, type LadderEntry, type SquadEntry, type Tier, type RankOvertake } from '../shared/types';
 
@@ -115,6 +117,12 @@ export class Home extends Phaser.Scene {
         ${logoTitle('TypeType', 22, false)}
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
           ${soundToggleHTML('btn-sound-toggle', true)}
+          ${canOfferInstall() ? `
+          <button id="btn-install" aria-label="Install app" style="
+            background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;
+            display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;flex-shrink:0;">
+            📲
+          </button>` : ''}
           <button id="btn-logout" aria-label="Log out" style="
             display:none;background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;
             align-items:center;justify-content:center;font-size:16px;cursor:pointer;flex-shrink:0;">
@@ -151,6 +159,24 @@ export class Home extends Phaser.Scene {
   }
 
   private bindShellEvents() {
+    this.containerEl.querySelector('#btn-install')?.addEventListener('click', async () => {
+      this.audio.playClick();
+      const btn = this.containerEl.querySelector('#btn-install');
+      if (isIOS()) {
+        showIOSInstallInstructions(() => btn?.remove());
+        return;
+      }
+      const accepted = await promptInstall();
+      if (accepted) btn?.remove();
+    });
+
+    // The native install dialog can also be accepted/dismissed outside our
+    // button (e.g. browser's own UI on some platforms) — either way, once
+    // the app is actually installed, drop the icon everywhere it's mounted.
+    window.addEventListener('appinstalled', () => {
+      this.containerEl?.querySelector('#btn-install')?.remove();
+    });
+
     this.containerEl.querySelector('#btn-achievements')?.addEventListener('click', () => {
       this.audio.playClick();
       this.showAchievementsComingSoon();

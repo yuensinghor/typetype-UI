@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { KEYPAD } from '../lib/keypad';
-import { AudioManager } from '../lib/audio';
+import { audioManager, type AudioManager } from '../lib/audio';
 import { theme, panel, label, primaryButton, secondaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { getIdentity } from '../game';
@@ -64,7 +64,7 @@ function starRow(stars: StarCount, size = 22): string {
  */
 export class Levels extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
-  private audio = new AudioManager();
+  private audio: AudioManager = audioManager;
 
   private phase: Phase = 'loading';
   private progress: LevelProgress | null = null;

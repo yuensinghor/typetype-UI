@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { getTimeLimit, generateEquation } from '../lib/equation';
 import { KEYPAD } from '../lib/keypad';
-import { AudioManager } from '../lib/audio';
+import { audioManager, type AudioManager } from '../lib/audio';
 import { theme, panel, label, primaryButton, secondaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { getIdentity } from '../game';
@@ -73,7 +73,7 @@ function timeLimitForRound(round: number): number {
  */
 export class EndlessMode extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
-  private audio = new AudioManager();
+  private audio: AudioManager = audioManager;
 
   private phase: Phase = 'landing';
   private round = 1;

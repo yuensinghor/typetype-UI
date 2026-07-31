@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { platform } from '../lib/standaloneAdapter';
 import { getIdentity } from '../game';
-import { buildInviteLink } from '../lib/identity';
+import { buildInviteLink, signInWithGoogle } from '../lib/identity';
 import { AudioManager, audioManager } from '../lib/audio';
 import { soundToggleHTML, bindSoundToggle } from '../lib/soundToggle';
 import { mergeHighestUnlockedTier } from '../lib/ladderEngine';
@@ -71,7 +71,6 @@ export class GameOver extends Phaser.Scene {
     }
 
     this.persistUnlockProgress();
-    this.maybeOfferInstallOnFirstPlay();
   }
 
   shutdown() {
@@ -370,7 +369,23 @@ export class GameOver extends Phaser.Scene {
 
   private footerHTML(showInvite = true): string {
     const c = theme.color;
+    const identity = getIdentity();
+    const isGuest = !identity || identity.isGuest;
+
     return `
+      ${isGuest ? `
+      <div style="${panel('padding:14px 16px;')}display:flex;flex-direction:column;gap:10px;text-align:center;">
+        <div style="font-size:12px;color:${c.textSecondary};line-height:1.6;">
+          Playing as Guest — sign in to save your progress and appear on the leaderboard for good.
+        </div>
+        <button id="btn-guest-google-signin" style="
+          width:100%;padding:11px 0;background:${c.bgCard};border:1px solid ${c.borderStrong};
+          border-radius:10px;color:${c.textPrimary};font-family:${theme.font.display};font-weight:700;
+          font-size:13px;cursor:pointer;">
+          Sign in with Google
+        </button>
+      </div>` : ''}
+
       ${showInvite ? `
       <button id="btn-invite" style="
         width:100%;padding:11px 0;background:transparent;border:1px dashed ${c.borderStrong};
@@ -389,6 +404,20 @@ export class GameOver extends Phaser.Scene {
 
   private bindFooterEvents(_unlockedTierReached: Tier) {
     const identity = getIdentity();
+
+    this.containerEl.querySelector('#btn-guest-google-signin')?.addEventListener('click', async (e) => {
+      this.audio.playClick();
+      const btn = e.currentTarget as HTMLButtonElement;
+      btn.disabled = true;
+      btn.textContent = 'Opening Google sign-in…';
+      try {
+        await signInWithGoogle();
+      } catch (err) {
+        console.error('[DigitDash] Google sign-in failed', err);
+        btn.disabled = false;
+        btn.textContent = 'Sign in with Google';
+      }
+    });
 
     this.containerEl.querySelector('#btn-lobby')?.addEventListener('click', () => {
       this.audio.playClick();
