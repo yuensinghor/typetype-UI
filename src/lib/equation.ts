@@ -12,8 +12,10 @@ interface Equation {
   targetAnswer: string;
 }
 
-function rnd(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+type RandFn = () => number;
+
+function rnd(rand: RandFn, min: number, max: number): number {
+  return Math.floor(rand() * (max - min + 1)) + min;
 }
 
 function stripSpaces(s: string): string {
@@ -36,36 +38,54 @@ function padNum(n: number, digits: number): string {
  *   hard:   two decimals (X.XX)   e.g. "47.23 + 88.91"      → "47.23+88.91"
  *   boss:   two decimals (XXXX.YYYY), exactly 19 chars typed
  *           e.g. "1234.5678 + 8765.4321" → "1234.5678+8765.4321"
+ *
+ * Takes a `rand` source (defaults to Math.random) so callers that need a
+ * server-reproducible sequence — e.g. Endless Mode's seeded verification —
+ * can pass a seeded PRNG instead. See generateEquationSeeded below.
  */
-export function generateEquation(tier: Tier): Equation {
-  const op = Math.random() < 0.5 ? '+' : '-';
+export function generateEquation(tier: Tier, rand: RandFn = Math.random): Equation {
+  const op = rand() < 0.5 ? '+' : '-';
 
   switch (tier) {
     case 'easy': {
-      const a = rnd(1, 9);
-      const b = rnd(1, 9);
+      const a = rnd(rand, 1, 9);
+      const b = rnd(rand, 1, 9);
       const equation = `${a} ${op} ${b}`;
       return { equation, targetAnswer: stripSpaces(equation) };
     }
     case 'medium': {
-      const a = rnd(10, 99);
-      const b = rnd(10, 99);
+      const a = rnd(rand, 10, 99);
+      const b = rnd(rand, 10, 99);
       const equation = `${a} ${op} ${b}`;
       return { equation, targetAnswer: stripSpaces(equation) };
     }
     case 'hard': {
-      const a = `${rnd(10, 99)}.${padNum(rnd(0, 99), 2)}`;
-      const b = `${rnd(10, 99)}.${padNum(rnd(0, 99), 2)}`;
+      const a = `${rnd(rand, 10, 99)}.${padNum(rnd(rand, 0, 99), 2)}`;
+      const b = `${rnd(rand, 10, 99)}.${padNum(rnd(rand, 0, 99), 2)}`;
       const equation = `${a} ${op} ${b}`;
       return { equation, targetAnswer: stripSpaces(equation) };
     }
     case 'boss': {
-      const a = `${rnd(1000, 9999)}.${padNum(rnd(0, 9999), 4)}`;
-      const b = `${rnd(1000, 9999)}.${padNum(rnd(0, 9999), 4)}`;
+      const a = `${rnd(rand, 1000, 9999)}.${padNum(rnd(rand, 0, 9999), 4)}`;
+      const b = `${rnd(rand, 1000, 9999)}.${padNum(rnd(rand, 0, 9999), 4)}`;
       const equation = `${a} ${op} ${b}`; // targetAnswer is always exactly 19 chars
       return { equation, targetAnswer: stripSpaces(equation) };
     }
   }
+}
+
+/**
+ * Same generator, explicit-seed entry point for Endless Mode. A run's seed
+ * is generated client-side at start and sent along with the final
+ * submission — the verify-endless-run Edge Function replays this exact
+ * function (ported inline, since Deno can't import from src/lib) against
+ * the same seed to independently regenerate every equation shown and check
+ * playerInput against it, instead of trusting anything the client reports
+ * about what the target was. See that function's header for the full
+ * threat-model note (this mirrors Daily Challenge's Phase 1.5 approach).
+ */
+export function generateEquationSeeded(rand: RandFn, tier: Tier): Equation {
+  return generateEquation(tier, rand);
 }
 
 // ── Timing (locked spec) ────────────────────────────────────────────────

@@ -1,7 +1,11 @@
 /**
- * Minimal WebAudio synth-based sound manager. No external audio files required,
- * which keeps the PWA installable/offline-friendly out of the box. Swap in
- * real audio files later by pointing these methods at an <audio> pool instead.
+ * Sound manager: short SFX (clicks, correct/fail, countdown) stay
+ * WebAudio-synthesized square/sine blips — cheap, instant, no asset needed.
+ * Menu/background music is a real looping track (public/audio/menu-music.mp3,
+ * precached by the service worker — see vite.config.ts's
+ * maximumFileSizeToCacheInBytes bump for this) played through a single
+ * shared <audio> element, replacing the earlier procedurally-generated
+ * arpeggio placeholder.
  *
  * Exported as a single shared instance (`audioManager`, below) rather than
  * one-per-scene, so the mute toggle and "is menu music currently playing"
@@ -9,13 +13,14 @@
  * needing to manually pass `{ audio: this.audio }` around.
  */
 const MUTE_KEY = 'dd_sound_muted';
+const MENU_MUSIC_SRC = `${import.meta.env.BASE_URL}audio/menu-music.mp3`;
+const MENU_MUSIC_VOLUME = 0.4;
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private soundEnabled = true;
   private musicEnabled = true;
-  private musicTimer: number | null = null;
-  private musicGain: GainNode | null = null;
+  private menuMusicEl: HTMLAudioElement | null = null;
   // Tracks whether menu music *should* be playing right now, so unmuting
   // resumes it and re-entering a menu after gameplay restarts it cleanly.
   private wantsMenuMusic = false;
@@ -46,13 +51,11 @@ export class AudioManager {
     return !this.soundEnabled;
   }
 
-  /** Stops the audible loop without forgetting we're still "in a menu" —
-   *  used only by toggleMute(), so unmuting resumes correctly. */
+  /** Pauses the audible track without forgetting we're still "in a menu" —
+   *  currentTime is preserved (not reset), so unmuting or coming back from
+   *  a gameplay round resumes mid-track rather than restarting from 0. */
   private pauseMusicPlayback() {
-    if (this.musicTimer !== null) {
-      clearInterval(this.musicTimer);
-      this.musicTimer = null;
-    }
+    this.menuMusicEl?.pause();
   }
 
   private getCtx(): AudioContext {
@@ -93,36 +96,33 @@ export class AudioManager {
     });
   }
 
+  private getMenuMusicEl(): HTMLAudioElement {
+    if (!this.menuMusicEl) {
+      const el = new Audio(MENU_MUSIC_SRC);
+      el.loop = true;
+      el.preload = 'auto';
+      el.volume = MENU_MUSIC_VOLUME;
+      this.menuMusicEl = el;
+    }
+    return this.menuMusicEl;
+  }
+
   /**
-   * Happy, upbeat looping menu theme — a major-key arpeggio (C major
-   * pentatonic-ish run) instead of the old minor-key drone. Meant to loop
-   * continuously on every non-gameplay screen (Preloader, Home, results,
-   * landing pages) and stop the instant a typing round actually starts,
-   * where only keypad/SFX sounds should be heard.
+   * Looping menu theme. Meant to play continuously on every non-gameplay
+   * screen (Preloader, Home, results, landing pages) and stop the instant a
+   * typing round actually starts, where only keypad/SFX sounds should be
+   * heard.
    */
   startMenuMusic() {
     this.wantsMenuMusic = true;
     if (!this.musicEnabled) return;
-    this.pauseMusicPlayback();
     try {
-      const ctx = this.getCtx();
-      const gain = ctx.createGain();
-      gain.gain.value = 0.02;
-      gain.connect(ctx.destination);
-      this.musicGain = gain;
-      // C major pentatonic, playful up-down bounce.
-      const notes = [523, 659, 784, 659, 587, 784, 988, 784];
-      let i = 0;
-      this.musicTimer = window.setInterval(() => {
-        if (!this.musicEnabled) return;
-        const osc = ctx.createOscillator();
-        osc.type = 'triangle';
-        osc.frequency.value = notes[i % notes.length];
-        osc.connect(gain);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.22);
-        i++;
-      }, 240);
+      const el = this.getMenuMusicEl();
+      // play() returns a Promise that rejects if the browser's autoplay
+      // policy blocks it (no user gesture yet) — same "fail silently and
+      // let the next real interaction retry" behavior as the old
+      // WebAudio-context path had.
+      el.play().catch(() => { /* ignore — will retry on next call */ });
     } catch {
       /* ignore */
     }
@@ -136,10 +136,7 @@ export class AudioManager {
 
   stopMusic() {
     this.wantsMenuMusic = false;
-    if (this.musicTimer !== null) {
-      clearInterval(this.musicTimer);
-      this.musicTimer = null;
-    }
+    this.pauseMusicPlayback();
   }
 
   setSoundEnabled(v: boolean) { this.soundEnabled = v; }

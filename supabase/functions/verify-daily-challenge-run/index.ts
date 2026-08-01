@@ -1,39 +1,41 @@
-// supabase/functions/verify-daily-challenge-run/index.ts
+// supabase/functions/verify-endless-run/index.ts
 //
-// Phase 1.5 — score integrity for Daily Challenge.
+// Phase 1.5 — score integrity for Endless Mode.
 //
-// The client still sends its full run (per-round playerInput + timeTaken),
-// but nothing it computes itself (points, status, totalScore) is trusted.
-// This function independently re-derives every round's correctness and
-// score from the row this same date's get-daily-challenge function already
-// locked into `daily_challenges`, then writes the verified result. Clients
-// no longer write to game_events or daily_challenge_best directly for this
-// mode — both tables' insert/update policies are service-role-only for
-// daily_challenge_best (see migration 007), so this function is the only
-// path that can create a leaderboard row.
+// Unlike Daily Challenge, Endless has no pre-locked equation set to check
+// against — every run is unique and equations generate on the fly. Instead,
+// the client sends the random SEED it used to generate that run's sequence
+// (see generateEquationSeeded in src/lib/equation.ts), and this function
+// replays the identical seeded PRNG (mulberry32, ported inline below since
+// Deno can't import from src/lib) to regenerate the exact same equations
+// and independently check playerInput against them. Nothing the client
+// reports about its own score, or what the target/equation even was, is
+// trusted — only roundIndex, playerInput, and timeTaken feed the
+// recomputation, exactly like verify-daily-challenge-run.
 //
-// What this catches: editing the submitted score/points in devtools or a
-// raw HTTP request (now completely ignored — recomputed server-side from
-// scratch), and claiming a wrong answer was correct (checked against the
-// real stored equation, not whatever the client says the target was).
+// One mistake ends an Endless run by design — this function enforces that
+// server-side too: scoring stops at (and does not count) the first round
+// that isn't a genuine correct answer, even if the client sent a longer
+// results array claiming otherwise.
 //
-// What this does NOT fully catch: a sufficiently patient attacker who
-// submits plausible-looking per-round timings for answers they didn't
-// actually type in real time. Closing that gap needs full server-driven
-// round timing (server issues each equation and starts its own clock),
-// which is a bigger change — this is intentionally scoped to eliminate the
-// trivial "edit one number" exploit and add a typing-speed plausibility
-// floor, not to build a fully server-authoritative game loop.
+// What this catches: editing the submitted score in devtools/raw HTTP,
+// claiming a wrong answer was correct, and claiming rounds continued past
+// the run-ending miss.
+//
+// What this does NOT fully catch: someone picks their own seed (self-
+// chosen, since Endless issues no server-side seed ahead of time) and thus
+// already knows every "correct" answer in advance without playing, then
+// submits fabricated-but-plausible timings. The MIN_SECONDS_PER_CHAR floor
+// caps how much that's worth — the best that gets you is the same ceiling
+// score a real human typing at the floor speed with zero mistakes would
+// get, identical to Daily Challenge's existing worst case (its equation
+// set is public too, via get-daily-challenge). Closing that gap needs a
+// server-issued seed/timing model — intentionally out of scope here, same
+// reasoning as verify-daily-challenge-run's own scoping note.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 type Tier = 'easy' | 'medium' | 'hard' | 'boss';
-
-interface DailyEquation {
-  stage: number;
-  kind: 'basic' | 'bonus';
-  display: string;
-}
 
 interface SubmittedRound {
   roundIndex: number;
@@ -43,46 +45,103 @@ interface SubmittedRound {
 
 interface VerifyRequestBody {
   userId: string;
-  challengeDate: string;
+  seed: number;
   results: SubmittedRound[];
 }
 
-const TOTAL_BASIC = 5;
-const TOTAL_STAGES = 10;
 const MAX_INPUT_LENGTH = 64; // sanity guard against absurd payloads
-
-const STAGE_TIER: Record<number, Tier> = {
-  1: 'easy', 2: 'easy', 3: 'medium', 4: 'hard', 5: 'boss',
-  6: 'boss', 7: 'boss', 8: 'boss', 9: 'boss', 10: 'boss',
-};
-
-// Mirrors RAMP.start values in src/lib/equation.ts (stages 1-5 always use
-// roundIndex=1 within Daily Challenge, i.e. the ramp's start value).
-const RAMP_START: Record<Tier, number> = {
-  easy: 2.0,
-  medium: 4.0,
-  hard: 6.0,
-  boss: 8.0,
-};
-
-const UNLOCK_TARGET_BOSS = 5.5; // mirrors UNLOCK_TARGETS.boss in equation.ts
+const MAX_ROUNDS = 500; // sanity cap — no legitimate run gets remotely close to this
 
 // A very generous typing-speed floor (20 chars/sec) — anything faster than
 // this for a given target length is not a real human input, regardless of
 // what timeTaken the client reports. Purely a plausibility clamp, not a
-// skill assessment.
+// skill assessment. Matches verify-daily-challenge-run's floor exactly.
 const MIN_SECONDS_PER_CHAR = 0.05;
+
+// ── mulberry32 — ported from src/lib/prng.ts. Must stay byte-for-byte
+// identical to the client's copy, or seeds stop reproducing the same
+// sequence and every legitimate run would fail verification. ──────────────
+type RandFn = () => number;
+
+function mulberry32(seed: number): RandFn {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ── Equation generation — ported from src/lib/equation.ts's
+// generateEquation/generateEquationSeeded. Must stay in lockstep with the
+// client's version (same rand() call order and count per tier) or replayed
+// sequences diverge. ─────────────────────────────────────────────────────
+function rnd(rand: RandFn, min: number, max: number): number {
+  return Math.floor(rand() * (max - min + 1)) + min;
+}
+
+function padNum(n: number, digits: number): string {
+  return String(n).padStart(digits, '0');
+}
 
 function stripSpaces(s: string): string {
   return String(s ?? '').replace(/\s+/g, '');
 }
 
-function timeLimitForStage(stage: number): number {
-  if (stage <= TOTAL_BASIC) {
-    return RAMP_START[STAGE_TIER[stage]];
+function generateEquationTarget(rand: RandFn, tier: Tier): string {
+  const op = rand() < 0.5 ? '+' : '-';
+  switch (tier) {
+    case 'easy': {
+      const a = rnd(rand, 1, 9);
+      const b = rnd(rand, 1, 9);
+      return `${a}${op}${b}`;
+    }
+    case 'medium': {
+      const a = rnd(rand, 10, 99);
+      const b = rnd(rand, 10, 99);
+      return `${a}${op}${b}`;
+    }
+    case 'hard': {
+      const a = `${rnd(rand, 10, 99)}.${padNum(rnd(rand, 0, 99), 2)}`;
+      const b = `${rnd(rand, 10, 99)}.${padNum(rnd(rand, 0, 99), 2)}`;
+      return `${a}${op}${b}`;
+    }
+    case 'boss': {
+      const a = `${rnd(rand, 1000, 9999)}.${padNum(rnd(rand, 0, 9999), 4)}`;
+      const b = `${rnd(rand, 1000, 9999)}.${padNum(rnd(rand, 0, 9999), 4)}`;
+      return `${a}${op}${b}`;
+    }
   }
-  const factor = Math.pow(0.95, stage - 6);
-  return parseFloat((UNLOCK_TARGET_BOSS * factor).toFixed(3));
+}
+
+// ── Round -> tier / time-limit — ported from EndlessMode.ts's
+// tierForRound/timeLimitForRound and equation.ts's RAMP/getTimeLimit. ──────
+function tierForRound(round: number): Tier {
+  if (round <= 5) return 'easy';
+  if (round <= 10) return 'medium';
+  if (round <= 15) return 'hard';
+  return 'boss';
+}
+
+const RAMP: Record<Tier, { start: number; end: number }> = {
+  easy: { start: 2.0, end: 1.4 },
+  medium: { start: 4.0, end: 2.6 },
+  hard: { start: 6.0, end: 4.0 },
+  boss: { start: 8.0, end: 6.5 },
+};
+
+function getTimeLimit(tier: Tier, roundIndexInTier: number): number {
+  const { start, end } = RAMP[tier];
+  const t = Math.min(4, Math.max(0, roundIndexInTier - 1)) / 4;
+  return start + (end - start) * t;
+}
+
+function timeLimitForRound(round: number): number {
+  const tier = tierForRound(round);
+  const roundInTier = round <= 20 ? ((round - 1) % 5) + 1 : 5;
+  return getTimeLimit(tier, roundInTier);
 }
 
 function pointsForRound(isCorrect: boolean, clampedTimeTaken: number, timeLimit: number): number {
@@ -98,9 +157,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as VerifyRequestBody;
-    const { userId, challengeDate, results } = body;
+    const { userId, seed, results } = body;
 
-    if (!userId || !challengeDate || !Array.isArray(results)) {
+    if (!userId || !Number.isFinite(seed) || !Array.isArray(results)) {
       return new Response(JSON.stringify({ error: 'Missing or invalid fields' }), { status: 400 });
     }
 
@@ -109,43 +168,22 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, // service-role: bypasses RLS, server-only
     );
 
-    // 1. Fetch the real, already-locked equation set for this date. This is
-    // the single source of truth for both the target text and the
-    // benchmark — never trust anything the client says about either.
-    const { data: daily, error: dailyError } = await supabase
-      .from('daily_challenges')
-      .select('equation_set, speed_benchmark_ms')
-      .eq('challenge_date', challengeDate)
-      .maybeSingle();
+    // Replay the exact same seeded sequence the client used.
+    const rand = mulberry32(seed);
+    const cappedResults = results.slice(0, MAX_ROUNDS);
 
-    if (dailyError) throw dailyError;
-    if (!daily) {
-      return new Response(JSON.stringify({ error: 'Unknown challenge date' }), { status: 400 });
-    }
-
-    const equationSet = daily.equation_set as DailyEquation[];
-    const speedBenchmarkMs = daily.speed_benchmark_ms as number;
-
-    // 2. Re-derive each round's correctness/points from scratch. Rounds are
-    // keyed by array position, not by any index the client sends.
-    const basicPoints: number[] = [];
-    const basicTimesMs: number[] = [];
-    let basicAllCorrect = true;
-
-    const bonusPoints: number[] = [];
-    let bonusCorrectCount = 0;
-
-    const cappedResults = results.slice(0, TOTAL_STAGES);
+    let totalScore = 0;
+    let roundsCleared = 0;
+    let lastRound = 0;
 
     for (let i = 0; i < cappedResults.length; i++) {
-      const stage = i + 1;
-      const eq = equationSet[i];
-      if (!eq) break;
+      const round = i + 1;
+      const tier = tierForRound(round);
+      const target = generateEquationTarget(rand, tier);
+      const timeLimit = timeLimitForRound(round);
 
       const submitted = cappedResults[i];
-      const target = stripSpaces(eq.display);
       const playerInput = stripSpaces(String(submitted?.playerInput ?? '')).slice(0, MAX_INPUT_LENGTH);
-      const timeLimit = timeLimitForStage(stage);
 
       const minPlausible = target.length * MIN_SECONDS_PER_CHAR;
       const rawTimeTaken = Number.isFinite(submitted?.timeTaken) ? Number(submitted.timeTaken) : timeLimit;
@@ -154,67 +192,53 @@ Deno.serve(async (req: Request) => {
       const isCorrect = playerInput === target;
       const points = pointsForRound(isCorrect, clampedTimeTaken, timeLimit);
 
-      if (stage <= TOTAL_BASIC) {
-        basicPoints.push(points);
-        basicTimesMs.push(clampedTimeTaken * 1000);
-        if (!isCorrect) basicAllCorrect = false;
-      } else {
-        bonusPoints.push(points);
-        if (isCorrect) bonusCorrectCount++;
-      }
+      lastRound = round;
+
+      if (!isCorrect) break; // one mistake ends the run — anything after this round is discarded
+
+      totalScore += points;
+      roundsCleared++;
     }
 
-    // Bonus stages only ever count if the basic 5 genuinely earned them —
-    // padding fake bonus-stage results without a qualifying basic run
-    // doesn't help; they're discarded entirely below.
-    const avgBasicMs = basicTimesMs.length
-      ? basicTimesMs.reduce((a, b) => a + b, 0) / basicTimesMs.length
-      : Infinity;
-    const reachedBonus = basicAllCorrect && basicTimesMs.length === TOTAL_BASIC && avgBasicMs <= speedBenchmarkMs;
+    const highestTierReached = tierForRound(Math.max(1, lastRound));
 
-    const verifiedTotalScore =
-      basicPoints.reduce((a, b) => a + b, 0) + (reachedBonus ? bonusPoints.reduce((a, b) => a + b, 0) : 0);
-    const bonusStagesCleared = reachedBonus ? bonusCorrectCount : 0;
-
-    // 3. Write the verified log row (raw submission kept in payload for
+    // Write the verified log row (raw submission kept in payload for
     // history/debugging; verified_score is the only trusted number).
     const { error: insertError } = await supabase.from('game_events').insert({
       user_id: userId,
-      mode: 'daily_challenge',
-      payload: { challengeDate, results, reachedBonus, bonusStagesCleared },
-      verified_score: verifiedTotalScore,
+      mode: 'endless',
+      payload: { seed, results, roundsCleared, highestTierReached },
+      verified_score: totalScore,
     });
     if (insertError) throw insertError;
 
-    // 4. Upsert the per-day best — only if this run beats the existing one.
+    // Upsert the all-time best — only if this run beats the existing one.
     const { data: existingBest } = await supabase
-      .from('daily_challenge_best')
+      .from('endless_best')
       .select('total_score')
       .eq('user_id', userId)
-      .eq('challenge_date', challengeDate)
       .maybeSingle();
 
-    if (!existingBest || verifiedTotalScore > existingBest.total_score) {
-      const { error: upsertError } = await supabase.from('daily_challenge_best').upsert(
+    if (!existingBest || totalScore > existingBest.total_score) {
+      const { error: upsertError } = await supabase.from('endless_best').upsert(
         {
           user_id: userId,
-          challenge_date: challengeDate,
-          total_score: verifiedTotalScore,
-          reached_bonus: reachedBonus,
-          bonus_stages_cleared: bonusStagesCleared,
+          total_score: totalScore,
+          rounds_cleared: roundsCleared,
+          highest_tier_reached: highestTierReached,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'user_id,challenge_date' },
+        { onConflict: 'user_id' },
       );
       if (upsertError) throw upsertError;
     }
 
     return new Response(
-      JSON.stringify({ verifiedTotalScore, reachedBonus, bonusStagesCleared }),
+      JSON.stringify({ verifiedTotalScore: totalScore, roundsCleared, highestTierReached }),
       { headers: { 'Content-Type': 'application/json' } },
     );
   } catch (err) {
-    console.error('[verify-daily-challenge-run] error:', err);
+    console.error('[verify-endless-run] error:', err);
     return new Response(JSON.stringify({ error: 'Failed to verify run' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

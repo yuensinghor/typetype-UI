@@ -26,7 +26,12 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,mp3}'],
+        // Workbox's default precache limit is 2MB — the menu music track is
+        // ~2.9MB, so without raising this it gets silently skipped (build
+        // warning only, no hard error) and falls back to a network fetch
+        // every time instead of being available offline.
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Never cache API calls to Supabase — always go to network for leaderboard/auth
         runtimeCaching: [
           {

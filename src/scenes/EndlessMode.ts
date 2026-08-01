@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
-import { getTimeLimit, generateEquation } from '../lib/equation';
+import { getTimeLimit, generateEquationSeeded } from '../lib/equation';
+import { mulberry32, type RandFn } from '../lib/prng';
 import { KEYPAD } from '../lib/keypad';
 import { audioManager, type AudioManager } from '../lib/audio';
 import { theme, panel, label, primaryButton, secondaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { getIdentity } from '../game';
 import { platform } from '../lib/standaloneAdapter';
-import { submitEndlessRun, fetchMyBestEndless, type EndlessBest } from '../lib/endless';
+import { submitEndlessRun, fetchMyBestEndless, fetchEndlessLeaderboard, type EndlessBest, type EndlessLeaderboardEntry } from '../lib/endless';
 import type { Tier, RoundResult } from '../shared/types';
 
 const TIER_LABELS: Record<Tier, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', boss: 'Boss' };
@@ -78,6 +79,8 @@ export class EndlessMode extends Phaser.Scene {
   private phase: Phase = 'landing';
   private round = 1;
   private results: RoundResult[] = [];
+  private seed = 0;
+  private rand: RandFn = Math.random;
 
   private currentEquation = '';
   private currentTarget = '';
@@ -103,6 +106,12 @@ export class EndlessMode extends Phaser.Scene {
     this.timerDone = false;
     this.answerInput = '';
     this.isQuitModalOpen = false;
+    // Fresh seed per run — sent to the server on submission so
+    // verify-endless-run can regenerate this exact equation sequence and
+    // check playerInput against it, instead of trusting the client's own
+    // report of what was shown (see equation.ts's generateEquationSeeded).
+    this.seed = Math.floor(Math.random() * 0xffffffff);
+    this.rand = mulberry32(this.seed);
   }
 
   create() {
@@ -245,7 +254,7 @@ export class EndlessMode extends Phaser.Scene {
     this.phase = 'playing';
 
     const tier = tierForRound(this.round);
-    const eq = generateEquation(tier);
+    const eq = generateEquationSeeded(this.rand, tier);
     this.currentEquation = eq.equation;
     this.currentTarget = stripSpaces(eq.targetAnswer);
     this.currentTimeLimit = timeLimitForRound(this.round);
@@ -623,6 +632,7 @@ export class EndlessMode extends Phaser.Scene {
     const identity = getIdentity();
     if (identity && !identity.isGuest) {
       submitEndlessRun(identity.userId, {
+        seed: this.seed,
         results: this.results,
         totalScore,
         roundsCleared,
@@ -647,9 +657,10 @@ export class EndlessMode extends Phaser.Scene {
           ${infoRow('Reached', TIER_LABELS[highestTierReached], c.accentBright)}
         </div>
 
-        <p style="font-size:11.5px;color:${c.textMuted};max-width:280px;margin-bottom:20px;">
-          Global leaderboard coming soon — for now it's just you against your own best.
-        </p>
+        <div style="margin-bottom:8px;">${label('Leaderboard', c.textSecondary)}</div>
+        <div id="endless-lb-card" style="width:100%;max-width:320px;${panel('padding:12px 10px;')}margin-bottom:20px;">
+          ${endlessSpinner('Loading leaderboard…')}
+        </div>
 
         <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px;">
           ${primaryButton('Run It Back', 'btn-retry', 'max-width:320px;')}
@@ -658,6 +669,7 @@ export class EndlessMode extends Phaser.Scene {
       </div>
     `;
 
+    this.refreshEndlessLeaderboard();
     this.containerEl.querySelector('#btn-retry')?.addEventListener('click', () => {
       this.audio.playClick();
       this.scene.restart({ audio: this.audio });
@@ -668,4 +680,62 @@ export class EndlessMode extends Phaser.Scene {
       this.scene.start('Home');
     });
   }
+
+  private async refreshEndlessLeaderboard() {
+    if (!this.containerEl?.querySelector('#endless-lb-card')) return;
+
+    const entries = await fetchEndlessLeaderboard();
+
+    // The scene may have already moved on (restart/back) by the time this
+    // resolves — re-check before touching the DOM.
+    const card = this.containerEl?.querySelector('#endless-lb-card') as HTMLElement;
+    if (!card) return;
+
+    if (entries.length === 0) {
+      card.innerHTML = `<div style="color:${theme.color.textMuted};font-size:12px;text-align:center;padding:16px;">Be the first on the all-time board!</div>`;
+      return;
+    }
+
+    const identity = getIdentity();
+    card.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;">
+        ${entries.map((e, i) => endlessLbRow(e, i, identity?.userId ?? '')).join('')}
+      </div>`;
+  }
+}
+
+function endlessSpinner(msg = 'Loading…') {
+  return `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:80px;gap:8px;">
+      <div style="width:18px;height:18px;border:2px solid ${theme.color.border};border-top:2px solid ${theme.color.accent};
+        border-radius:50%;animation:spin 0.9s linear infinite;"></div>
+      <span style="font-size:11px;color:${theme.color.textMuted};">${msg}</span>
+    </div>`;
+}
+
+function endlessLbRow(e: EndlessLeaderboardEntry, i: number, myUserId: string) {
+  const c = theme.color;
+  const isMe = !!myUserId && e.userId === myUserId;
+  const rankColor = i === 0 ? c.warning : i === 1 ? c.textSecondary : i === 2 ? '#B5824A' : c.textMuted;
+  const initial = e.username.charAt(0).toUpperCase();
+
+  // avatarUrl is currently always null for most players — Google avatar
+  // capture hasn't shipped yet — so this falls back to an initial-letter
+  // badge rather than breaking.
+  const avatarHtml = e.avatarUrl
+    ? `<img src="${e.avatarUrl}" alt="" style="width:20px;height:20px;border-radius:50%;flex-shrink:0;object-fit:cover;" />`
+    : `<div style="width:20px;height:20px;border-radius:50%;flex-shrink:0;background:${c.accentDim};
+        display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${c.accent};">${initial}</div>`;
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:10px;font-size:12px;
+      background:${isMe ? c.accentDim : 'transparent'};">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
+        <span style="font-weight:700;color:${rankColor};width:20px;flex-shrink:0;">#${i + 1}</span>
+        ${avatarHtml}
+        <span style="font-weight:700;color:${c.textPrimary};min-width:0;
+          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.username}</span>
+      </div>
+      <span style="color:${c.textMuted};font-size:11px;font-weight:700;flex-shrink:0;">${e.totalScore}pts</span>
+    </div>`;
 }

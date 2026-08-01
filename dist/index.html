@@ -26,9 +26,12 @@
   <meta name="twitter:description" content="Race the clock across four gates before time runs out. Can you clear the board?" />
   <meta name="twitter:image" content="/icons/icon-512.png" />
 
-  <!-- Android/Chrome: drives the beforeinstallprompt install banner + splash screen -->
-  <link rel="manifest" href="/manifest.webmanifest" />
-
+  <!-- Android/Chrome: beforeinstallprompt install banner + splash screen.
+       vite-plugin-pwa auto-injects the actual <link rel="manifest"> tag at
+       build time (with the correct base-relative href) — do not add one
+       here too. A duplicate manifest link is invalid and can silently
+       break Chrome's installability check (no console error, the
+       beforeinstallprompt event just never fires). -->
   <!-- iOS Safari: none of these are read from manifest.webmanifest — Apple
        requires its own separate meta tags, or "Add to Home Screen" falls
        back to a screenshot icon and the full page <title> as the label. -->
@@ -75,7 +78,7 @@
       * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-B0SA5fUE.js"></script>
+  <script type="module" crossorigin src="./assets/index-CDsxxRLV.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
 <body>
   <div id="game-container"></div>

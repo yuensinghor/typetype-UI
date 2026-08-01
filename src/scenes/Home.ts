@@ -53,6 +53,34 @@ const TIER_LABEL_TEXT_COLORS: Record<Tier, string> = {
   boss: theme.palette.coral,
 };
 
+const ICON_TAB_FRIENDS = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+  <circle cx="9" cy="7" r="4"></circle>
+  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+</svg>`;
+
+const ICON_TAB_DAILY = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+  <line x1="16" y1="2" x2="16" y2="6"></line>
+  <line x1="8" y1="2" x2="8" y2="6"></line>
+  <line x1="3" y1="10" x2="21" y2="10"></line>
+</svg>`;
+
+const ICON_TAB_ENDLESS = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.096-8-12.191-8-5.096 0-5.096 8 0 8 5.095 0 7.096-8 12.191-8z"></path>
+</svg>`;
+
+const ICON_TAB_LEVELS = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M3 20h4v-6H3v6z"></path>
+  <path d="M10 20h4v-10h-4v10z"></path>
+  <path d="M17 20h4v-16h-4v16z"></path>
+</svg>`;
+
 let stylesInjected = false;
 function injectHomeStyles() {
   if (stylesInjected) return;
@@ -60,45 +88,46 @@ function injectHomeStyles() {
   const style = document.createElement('style');
   style.id = 'home-carousel-styles';
   style.textContent = `
-    .home-track {
-      display:flex; height:100%; overflow-x:auto; overflow-y:hidden;
-      scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
-      scrollbar-width:none;
+    .home-panels {
+      flex:1; position:relative; overflow:hidden;
     }
-    .home-track::-webkit-scrollbar { display:none; }
     .home-page {
-      flex:0 0 100%; width:100%; height:100%; scroll-snap-align:start;
-      overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch;
+      position:absolute; inset:0; overflow-y:auto; overflow-x:hidden;
+      -webkit-overflow-scrolling:touch; display:none; flex-direction:column; gap:14px;
       padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));
-      display:flex; flex-direction:column; gap:14px;
     }
+    .home-page.active { display:flex; }
     .home-page::-webkit-scrollbar { width:6px; }
     .home-page::-webkit-scrollbar-thumb { background:${theme.color.borderStrong}; border-radius:3px; }
-    .home-dot {
-      width:7px; height:7px; border-radius:50%; background:${theme.color.border};
-      transition:background 0.2s, transform 0.2s;
+    .home-tabbar {
+      display:flex; flex-shrink:0; border-top:1px solid ${theme.color.border};
+      background:${theme.color.bgCard}; padding-bottom:env(safe-area-inset-bottom,0px);
     }
-    .home-dot.active { background:${theme.palette.coral}; transform:scale(1.3); }
+    .home-tab {
+      flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:3px; padding:8px 0 6px; background:none; border:none; cursor:pointer;
+      color:${theme.color.textMuted}; font-family:${theme.font.body}; font-size:10px; font-weight:700;
+    }
+    .home-tab.active { color:${theme.palette.coral}; }
   `;
   document.head.appendChild(style);
 }
 
 /**
- * Home — the swipeable carousel shell that replaces MainMenu.ts as the
- * post-boot scene. 4 always-reachable pages (swipe is never gated, only
- * each page's Start/Challenge button is): Challenge Categories, Daily
+ * Home — the tab-bar shell that replaces MainMenu.ts as the post-boot
+ * scene. 4 always-reachable tabs (switching tabs is never gated, only each
+ * page's Start/Challenge button is): Friends (Challenge Categories), Daily
  * Challenge, Endless, Levels. Achievements lives behind the header trophy
- * icon, not as a 5th page, per the locked nav-redesign spec.
+ * icon, not as a 5th tab, per the locked nav-redesign spec.
  *
- * Challenge Categories' ladder grid + friends leaderboard + invite button
- * is ported in as-is (markup/logic unchanged) from the now-superseded
+ * Friends' ladder grid + friends leaderboard + invite button is ported in
+ * as-is (markup/logic unchanged) from the now-superseded
  * ChallengeCategories.ts. Daily Challenge/Endless/Levels get lightweight
  * landing content here — real gameplay stays in their own scenes, launched
  * when a page's Start button is tapped.
  */
 export class Home extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
-  private trackEl!: HTMLDivElement;
   private audio: AudioManager = audioManager;
   private auth: AuthState = { isLoggedIn: false, unlocks: { clearedAllTiers: false, distinctDaysPlayed: 0 } };
   private activePage = 0;
@@ -162,24 +191,28 @@ export class Home extends Phaser.Scene {
         </div>
       </div>
 
-      <div class="home-track" id="home-track">
-        <div class="home-page" id="page-challenge_categories"></div>
+      <div class="home-panels" id="home-panels">
+        <div class="home-page active" id="page-challenge_categories"></div>
         <div class="home-page" id="page-daily_challenge"></div>
         <div class="home-page" id="page-endless"></div>
+        <div class="home-page" id="page-levels"></div>
       </div>
 
-      <div style="display:flex;justify-content:center;gap:6px;padding:8px 0 12px;flex-shrink:0;">
-        ${[0, 1, 2].map(i => `<div class="home-dot${i === 0 ? ' active' : ''}" data-dot="${i}"></div>`).join('')}
+      <div class="home-tabbar" id="home-tabbar">
+        <button class="home-tab active" data-tab="0" aria-label="Friends">${ICON_TAB_FRIENDS}<span>Friends</span></button>
+        <button class="home-tab" data-tab="1" aria-label="Daily">${ICON_TAB_DAILY}<span>Daily</span></button>
+        <button class="home-tab" data-tab="2" aria-label="Endless">${ICON_TAB_ENDLESS}<span>Endless</span></button>
+        <button class="home-tab" data-tab="3" aria-label="Levels">${ICON_TAB_LEVELS}<span>Levels</span></button>
       </div>
     `;
 
-    this.trackEl = this.containerEl.querySelector('#home-track') as HTMLDivElement;
     bindSoundToggle(this.containerEl);
     audioManager.startMenuMusic();
 
     this.renderChallengeCategoriesPage();
     this.renderDailyChallengePage({ allowed: false, reason: 'locked' }, this.auth);
     this.renderEndlessPage({ allowed: false, reason: 'locked' }, this.auth);
+    this.renderLevelsPage(this.auth);
 
     this.bindShellEvents();
   }
@@ -255,15 +288,24 @@ export class Home extends Phaser.Scene {
       window.location.reload();
     });
 
-    // Track which page is active (for the dot indicator) as the player swipes.
-    this.trackEl.addEventListener('scroll', () => {
-      const idx = Math.round(this.trackEl.scrollLeft / this.trackEl.clientWidth);
-      if (idx !== this.activePage) {
-        this.activePage = idx;
-        this.containerEl.querySelectorAll('.home-dot').forEach((dot, i) => {
-          dot.classList.toggle('active', i === idx);
-        });
-      }
+    this.containerEl.querySelectorAll('.home-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number((btn as HTMLElement).dataset.tab);
+        this.audio.playClick();
+        this.setActiveTab(idx);
+      });
+    });
+  }
+
+  private setActiveTab(idx: number) {
+    if (idx === this.activePage) return;
+    this.activePage = idx;
+
+    const pages = this.containerEl.querySelectorAll('.home-page');
+    pages.forEach((page, i) => page.classList.toggle('active', i === idx));
+
+    this.containerEl.querySelectorAll('.home-tab').forEach((btn, i) => {
+      btn.classList.toggle('active', i === idx);
     });
   }
 
@@ -457,21 +499,39 @@ export class Home extends Phaser.Scene {
     });
   }
 
-  // ── Page 4: Levels — PARKED. Phase 4 isn't built yet (Levels.ts is still
-  // a placeholder), so this page is no longer added to the carousel at all
-  // rather than shown as a locked/teased slot. The function is left intact,
-  // unused, so re-enabling it later is just re-adding the page-levels div,
-  // the 4th dot, and these two call sites.
+  // ── Page 4: Levels (landing-only — real gameplay stays in Levels.ts) ──
 
   private renderLevelsPage(auth: AuthState) {
+    const c = theme.color;
     const page = this.containerEl.querySelector('#page-levels') as HTMLElement;
     if (!page) return;
-    page.innerHTML = renderLockedPageHTML(
-      'Levels',
-      '100+ bite-sized stages. Collect stars, unlock keypad skins.',
-      auth,
-      ENDLESS_LEVELS_DAYS_REQUIRED
-    );
+    const access = canAccessMode('levels', auth);
+    const locked = access.reason === 'guest_not_allowed' || access.reason === 'locked';
+
+    if (locked) {
+      const teaser = access.reason === 'guest_not_allowed'
+        ? 'Log in to start your first stage'
+        : '100+ bite-sized stages \u2014 collect stars, unlock keypad skins';
+      page.innerHTML = renderLockedPageHTML('Levels', teaser, auth, ENDLESS_LEVELS_DAYS_REQUIRED);
+      return;
+    }
+
+    page.innerHTML = `
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;">
+        <div style="${panel('padding:28px 22px;')}max-width:320px;display:flex;flex-direction:column;gap:10px;align-items:center;">
+          <span style="font-family:${theme.font.display};font-size:20px;font-weight:800;color:${c.textPrimary};">
+            Levels
+          </span>
+          <span style="font-size:12.5px;color:${c.textMuted};">100+ bite-sized stages. Collect stars, unlock keypad skins.</span>
+        </div>
+        ${primaryButton('Start', 'btn-start-levels', 'max-width:320px;')}
+      </div>
+    `;
+
+    page.querySelector('#btn-start-levels')?.addEventListener('click', () => {
+      this.audio.playClick();
+      this.scene.start('Levels', { audio: this.audio });
+    });
   }
 
   // ── Auth + unlocks (drives every gated page's progress bar) ────────────
@@ -491,6 +551,7 @@ export class Home extends Phaser.Scene {
     const endlessAccess = canAccessMode('endless', this.auth);
     this.renderDailyChallengePage(dailyAccess, this.auth);
     this.renderEndlessPage(endlessAccess, this.auth);
+    this.renderLevelsPage(this.auth);
   }
 }
 

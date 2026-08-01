@@ -6,7 +6,7 @@ import { theme, panel, label, primaryButton, secondaryButton } from '../lib/them
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { getIdentity } from '../game';
 import { platform } from '../lib/standaloneAdapter';
-import { fetchDailyChallenge, submitDailyChallengeRun, fetchMyBestToday, type DailyEquation, type DailyChallengeBest } from '../lib/dailyChallenge';
+import { fetchDailyChallenge, submitDailyChallengeRun, fetchMyBestToday, fetchDailyLeaderboard, type DailyEquation, type DailyChallengeBest, type DailyLeaderboardEntry } from '../lib/dailyChallenge';
 import type { Tier, RoundResult } from '../shared/types';
 
 // Stage -> tier mapping. MUST match supabase/functions/get-daily-challenge/index.ts
@@ -790,18 +790,89 @@ export class DailyChallenge extends Phaser.Scene {
           ${infoRow('Bonus stages', this.reachedBonus ? `${bonusStagesCleared}/5 cleared` : 'Not unlocked', this.reachedBonus ? c.accentBright : c.textMuted)}
         </div>
 
+        <div style="margin-bottom:8px;">${label('Leaderboard', c.textSecondary)}</div>
+        <div id="dc-lb-card" style="width:100%;max-width:320px;${panel('padding:12px 10px;')}margin-bottom:20px;">
+          ${dcSpinner('Loading leaderboard…')}
+        </div>
+
         <p style="font-size:11.5px;color:${c.textMuted};max-width:280px;margin-bottom:20px;">
-          Come back tomorrow for a new challenge. Global leaderboard coming soon.
+          Come back tomorrow for a new challenge.
         </p>
 
         ${primaryButton('Back to Menu', 'btn-back', 'max-width:320px;')}
       </div>
     `;
 
+    this.refreshDailyLeaderboard();
     this.containerEl.querySelector('#btn-back')?.addEventListener('click', () => {
       this.audio.playClick();
       this.containerEl?.closest('.dd-shell')?.remove();
       this.scene.start('Home');
     });
   }
+
+  private async refreshDailyLeaderboard() {
+    if (!this.containerEl?.querySelector('#dc-lb-card')) return;
+
+    const entries = await fetchDailyLeaderboard(this.challengeDate);
+
+    // The scene may have already moved on (or the shell removed) by the
+    // time this resolves — re-check before touching the DOM.
+    const card = this.containerEl?.querySelector('#dc-lb-card') as HTMLElement;
+    if (!card) return;
+
+    if (entries.length === 0) {
+      card.innerHTML = `<div style="color:${theme.color.textMuted};font-size:12px;text-align:center;padding:16px;">You're the first score on the board today!</div>`;
+      return;
+    }
+
+    const identity = getIdentity();
+    card.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;">
+        ${entries.map((e, i) => dcLbRow(e, i, identity?.userId ?? '')).join('')}
+      </div>`;
+  }
+}
+
+function dcSpinner(msg = 'Loading…') {
+  return `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:80px;gap:8px;">
+      <div style="width:18px;height:18px;border:2px solid ${theme.color.border};border-top:2px solid ${theme.color.accent};
+        border-radius:50%;animation:spin 0.9s linear infinite;"></div>
+      <span style="font-size:11px;color:${theme.color.textMuted};">${msg}</span>
+    </div>`;
+}
+
+function dcLbRow(e: DailyLeaderboardEntry, i: number, myUserId: string) {
+  const c = theme.color;
+  const isMe = !!myUserId && e.userId === myUserId;
+  const rankColor = i === 0 ? c.warning : i === 1 ? c.textSecondary : i === 2 ? '#B5824A' : c.textMuted;
+  const initial = e.username.charAt(0).toUpperCase();
+
+  // avatarUrl is currently always null for most players — Google avatar
+  // capture hasn't shipped yet (see identity.ts on-the-horizon note) — so
+  // this falls back to an initial-letter badge rather than breaking.
+  const avatarHtml = e.avatarUrl
+    ? `<img src="${e.avatarUrl}" alt="" style="width:20px;height:20px;border-radius:50%;flex-shrink:0;object-fit:cover;" />`
+    : `<div style="width:20px;height:20px;border-radius:50%;flex-shrink:0;background:${c.accentDim};
+        display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${c.accent};">${initial}</div>`;
+
+  const bonusBadge = e.reachedBonus
+    ? `<span style="font-size:10px;font-weight:700;color:${c.warning};margin-right:5px;">🔥×${e.bonusStagesCleared}</span>`
+    : '';
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:10px;font-size:12px;
+      background:${isMe ? c.accentDim : 'transparent'};">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
+        <span style="font-weight:700;color:${rankColor};width:20px;flex-shrink:0;">#${i + 1}</span>
+        ${avatarHtml}
+        <div style="display:flex;align-items:center;gap:3px;min-width:0;overflow:hidden;">
+          ${bonusBadge}
+          <span style="font-weight:700;color:${c.textPrimary};
+            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.username}</span>
+        </div>
+      </div>
+      <span style="color:${c.textMuted};font-size:11px;font-weight:700;">${e.totalScore}pts</span>
+    </div>`;
 }
