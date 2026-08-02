@@ -12,6 +12,7 @@ import { Levels } from './scenes/Levels';
 import { Game } from './scenes/Game';
 import { GameOver } from './scenes/GameOver';
 import { DailyChallenge } from './scenes/DailyChallenge';
+import { Achievements } from './scenes/Achievements';
 import type { Identity } from './shared/types';
 
 export const config: Phaser.Types.Core.GameConfig = {
@@ -22,7 +23,7 @@ export const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [Boot, Preloader, ChallengeLanding, ChallengeTestRound, ChallengeResult, Home, MainMenu, ChallengeCategories, EndlessMode, Levels, Game, GameOver, DailyChallenge],
+  scene: [Boot, Preloader, ChallengeLanding, ChallengeTestRound, ChallengeResult, Home, MainMenu, ChallengeCategories, EndlessMode, Levels, Game, GameOver, DailyChallenge, Achievements],
 };
 
 export const phaserGame = new Phaser.Game(config);

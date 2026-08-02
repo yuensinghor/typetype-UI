@@ -269,7 +269,8 @@ export class Home extends Phaser.Scene {
 
     this.containerEl.querySelector('#btn-achievements')?.addEventListener('click', () => {
       this.audio.playClick();
-      this.showAchievementsComingSoon();
+      this.containerEl?.closest('.dd-shell')?.remove();
+      this.scene.start('Achievements', { audio: this.audio });
     });
 
     this.containerEl.querySelector('#btn-logout')?.addEventListener('click', async () => {
@@ -307,19 +308,6 @@ export class Home extends Phaser.Scene {
     this.containerEl.querySelectorAll('.home-tab').forEach((btn, i) => {
       btn.classList.toggle('active', i === idx);
     });
-  }
-
-  private showAchievementsComingSoon() {
-    const c = theme.color;
-    const toast = document.createElement('div');
-    toast.style.cssText = `
-      position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:1200;
-      ${panel('padding:10px 16px;')}font-family:${theme.font.body};font-size:12.5px;
-      font-weight:600;color:${c.textSecondary};white-space:nowrap;animation:popIn 0.15s;
-    `;
-    toast.textContent = '🏆 Achievements — coming soon';
-    this.containerEl.appendChild(toast);
-    setTimeout(() => toast.remove(), 1800);
   }
 
   // ── Page 1: Challenge Categories (ported from ChallengeCategories.ts) ──
