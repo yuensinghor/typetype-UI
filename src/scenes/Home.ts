@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabaseClient';
 import Phaser from 'phaser';
 import { phaserGame, getIdentity } from '../game';
 import { platform } from '../lib/standaloneAdapter';
@@ -113,19 +114,6 @@ function injectHomeStyles() {
   document.head.appendChild(style);
 }
 
-/**
- * Home — the tab-bar shell that replaces MainMenu.ts as the post-boot
- * scene. 4 always-reachable tabs (switching tabs is never gated, only each
- * page's Start/Challenge button is): Friends (Challenge Categories), Daily
- * Challenge, Endless, Levels. Achievements lives behind the header trophy
- * icon, not as a 5th tab, per the locked nav-redesign spec.
- *
- * Friends' ladder grid + friends leaderboard + invite button is ported in
- * as-is (markup/logic unchanged) from the now-superseded
- * ChallengeCategories.ts. Daily Challenge/Endless/Levels get lightweight
- * landing content here — real gameplay stays in their own scenes, launched
- * when a page's Start button is tapped.
- */
 export class Home extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
   private audio: AudioManager = audioManager;
@@ -143,8 +131,6 @@ export class Home extends Phaser.Scene {
   }
 
   create() {
-    // Phaser doesn't auto-call a method named `shutdown` — must bind explicitly
-    // (see Game.ts for the full explanation of why this matters everywhere).
     this.events.once('shutdown', this.shutdown, this);
     injectGlobalStyles();
     injectHomeStyles();
@@ -158,8 +144,6 @@ export class Home extends Phaser.Scene {
     if (this.onAppInstalled) window.removeEventListener('appinstalled', this.onAppInstalled);
     this.containerEl?.closest('.dd-shell')?.remove();
   }
-
-  // ── Shell: header + swipeable track + page dots ────────────────────────
 
   private buildShell() {
     const c = theme.color;
@@ -242,12 +226,6 @@ export class Home extends Phaser.Scene {
   private bindShellEvents() {
     this.bindInstallButton();
 
-    // beforeinstallprompt can fire after this header already rendered (it's
-    // async and not guaranteed to resolve before Home boots) — when that
-    // happens, canOfferInstall() was false at render time and the button
-    // never made it into the initial HTML. Listen for the retroactive
-    // signal and insert it then, instead of the icon staying missing for
-    // the rest of the session.
     this.onInstallReady = () => {
       if (this.containerEl?.querySelector('#btn-install')) return;
       if (!canOfferInstall()) return;
@@ -259,9 +237,6 @@ export class Home extends Phaser.Scene {
     };
     window.addEventListener('dd-install-ready', this.onInstallReady);
 
-    // The native install dialog can also be accepted/dismissed outside our
-    // button (e.g. browser's own UI on some platforms) — either way, once
-    // the app is actually installed, drop the icon everywhere it's mounted.
     this.onAppInstalled = () => {
       this.containerEl?.querySelector('#btn-install')?.remove();
     };
@@ -281,11 +256,6 @@ export class Home extends Phaser.Scene {
       } catch (err) {
         console.error('[TypeType] signOut failed:', err);
       }
-      // Full reload rather than in-memory state juggling — Preloader's boot
-      // flow re-resolves identity from scratch (falls back to guest) and
-      // re-fetches ladder/unlock progress fresh, so there's no risk of
-      // stale registry values (highestUnlockedTier, tierBadges, etc.)
-      // leaking from the just-ended session into the next one.
       window.location.reload();
     });
 
@@ -310,7 +280,7 @@ export class Home extends Phaser.Scene {
     });
   }
 
-  // ── Page 1: Challenge Categories (ported from ChallengeCategories.ts) ──
+  // ── Page 1: Challenge Categories (Single Image + Invisible Buttons) ──
 
   private renderChallengeCategoriesPage() {
     const c = theme.color;
@@ -318,29 +288,75 @@ export class Home extends Phaser.Scene {
     const badges: Partial<Record<Tier, boolean>> = phaserGame.registry.get('tierBadges') ?? {};
     const page = this.containerEl.querySelector('#page-challenge_categories') as HTMLElement;
 
+    page.style.padding = '0';
+    page.style.background = 'none';
+
     page.innerHTML = `
-      <div>
-        ${label('Choose a level', c.textSecondary)}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
-          ${TIER_ORDER.map(t => levelCard(t, highestTier, !!badges[t])).join('')}
+      <img src="/images/bg_playground.png" alt="Playground Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
+
+      <div style="position: relative; z-index: 1; display: flex; gap: 10px; flex: 1; padding: 12px; padding-bottom: 90px; box-sizing: border-box; height: 100%;">
+        
+        <!-- Left Column: Level Images -->
+        <div style="flex: 1; min-width: 0; position: relative; height: 100%;">
+          ${levelCard('boss', highestTier, !!badges.boss, '0%', '23%')}
+          ${levelCard('hard', highestTier, !!badges.hard, '22%', '23%')}
+          ${levelCard('medium', highestTier, !!badges.medium, '43%', '23%')}
+          ${levelCard('easy', highestTier, !!badges.easy, '65%', '23%')}
+        </div>
+
+        <!-- Right Column: 4 Tier Leaderboards -->
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding-right: 4px; margin-top: 20px;">
+          
+        <!-- Right Column: 4 Tier Leaderboards (Absolute Positioned for alignment) -->
+        <div style="flex: 1; min-width: 0; position: relative; height: 100%;">
+          
+          <!-- Boss Ranking (Top) -->
+          <div id="lb-boss" style="
+            position: absolute; top: 5%; left: 0; right: 0;
+            height: 125px;
+            background: url('/images/ranking.png') no-repeat center center; 
+            background-size: 100% 100%; 
+            border-radius: 12px; 
+            padding: 15px;">
+            ${spinner()}
+          </div>
+
+          <!-- Hard Ranking -->
+          <div id="lb-hard" style="
+            position: absolute; top: 28%; left: 0; right: 0;
+            height: 125px;
+            background: url('/images/ranking.png') no-repeat center center; 
+            background-size: 100% 100%; 
+            border-radius: 12px; 
+            padding: 15px;">
+            ${spinner()}
+          </div>
+
+          <!-- Medium Ranking -->
+          <div id="lb-medium" style="
+            position: absolute; top: 50%; left: 0; right: 0;
+            height: 125px;
+            background: url('/images/ranking.png') no-repeat center center; 
+            background-size: 100% 100%; 
+            border-radius: 12px; 
+            padding: 15px;">
+            ${spinner()}
+          </div>
+
+          <!-- Easy Ranking (Bottom) -->
+          <div id="lb-easy" style="
+            position: absolute; top: 72%; left: 0; right: 0;
+            height: 125px;
+            background: url('/images/ranking.png') no-repeat center center; 
+            background-size: 100% 100%; 
+            border-radius: 12px; 
+            padding: 15px;">
+            ${spinner()}
+          </div>
         </div>
       </div>
 
-      <div style="display:flex;flex-direction:column;flex:1;min-height:220px;">
-        <div style="margin-bottom:8px;">
-          ${label('Friends', c.textSecondary)}
-        </div>
-        <div id="lb-card" style="${panel('padding:10px;')}flex:1;min-height:160px;overflow-y:auto;
-          display:flex;flex-direction:column;justify-content:center;align-items:center;">
-          ${spinner()}
-        </div>
-      </div>
-
-      <button id="btn-invite" style="
-        width:100%;padding:12px 0;background:transparent;border:1px dashed ${c.borderStrong};border-radius:12px;
-        color:${c.textSecondary};font-family:${theme.font.body};font-weight:600;font-size:12.5px;cursor:pointer;">
-        Invite friends
-      </button>
+      <img id="btn-invite" src="/images/btn_invite.png" alt="Invite Friends" style="position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); width: 200px; max-width: 60%; height: auto; cursor: pointer; z-index: 20; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));" />
     `;
 
     page.querySelectorAll('.dd-level-card').forEach(cardEl => {
@@ -359,11 +375,9 @@ export class Home extends Phaser.Scene {
       const link = buildInviteLink(identity.inviteCode);
       try {
         await navigator.clipboard.writeText(link);
-        const btn = page.querySelector('#btn-invite') as HTMLButtonElement;
-        const original = btn.textContent;
-        btn.textContent = 'Link copied!';
-        btn.style.color = theme.color.success;
-        setTimeout(() => { if (btn) { btn.textContent = original; btn.style.color = theme.color.textSecondary; } }, 2000);
+        const btn = page.querySelector('#btn-invite') as HTMLImageElement;
+        btn.style.opacity = '0.6';
+        setTimeout(() => { if (btn) btn.style.opacity = '1'; }, 2000);
       } catch {
         prompt('Copy your invite link:', link);
       }
@@ -371,13 +385,6 @@ export class Home extends Phaser.Scene {
   }
 
   private async refreshChallengeLeaderboard() {
-    const page = this.containerEl?.querySelector('#page-challenge_categories') as HTMLElement;
-    const lbCard = page?.querySelector('#lb-card') as HTMLElement;
-    if (lbCard) {
-      lbCard.style.justifyContent = 'center';
-      lbCard.innerHTML = spinner();
-    }
-
     const identity = getIdentity();
     const username = identity?.username ?? '';
 
@@ -395,33 +402,92 @@ export class Home extends Phaser.Scene {
       }
     } catch (err) {
       console.error('[TypeType] leaderboard fetch failed', err);
-      if (lbCard) {
-        lbCard.innerHTML = `<div style="color:${theme.color.textMuted};font-size:12px;text-align:center;padding:16px;">
-          Couldn't load the leaderboard. Try again shortly.</div>`;
-      }
-      return;
     }
 
     phaserGame.registry.set('ladder', entries);
-    if (!lbCard) return;
 
-    if (entries.length === 0) {
-      lbCard.style.justifyContent = 'center';
-      lbCard.innerHTML = `
-        <div style="color:${theme.color.textMuted};font-size:12px;text-align:center;padding:20px;">
-          No friends yet — invite someone to see them here.
-        </div>`;
-      return;
+    // --- NEW: Fetch Tier Leaderboards ---
+    const ids = new Set<string>();
+    if (identity) {
+      ids.add(identity.userId);
+      entries.forEach(e => ids.add(e.userId));
     }
 
-    lbCard.style.justifyContent = 'flex-start';
-    lbCard.innerHTML = `
-      <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
-        ${entries.map((e, i) => lbRow(e, i, username, overtookMeUserIds)).join('')}
-      </div>`;
+    const tierData: Record<Tier, { username: string; bestTimeMs: number }[]> = { easy: [], medium: [], hard: [], boss: [] };
+
+    if (ids.size > 0) {
+      try {
+        const { data } = await supabase
+          .from('tier_best_scores')
+          .select('user_id, tier, best_time_ms, profiles(username)')
+          .in('user_id', Array.from(ids));
+
+        (data ?? []).forEach(row => {
+          if (tierData[row.tier as Tier]) {
+            tierData[row.tier as Tier].push({
+              username: (row.profiles as any)?.username ?? 'Unknown',
+              bestTimeMs: row.best_time_ms
+            });
+          }
+        });
+
+        for (const tier of ['easy', 'medium', 'hard', 'boss'] as Tier[]) {
+          tierData[tier].sort((a, b) => a.bestTimeMs - b.bestTimeMs);
+          tierData[tier] = tierData[tier].slice(0, 3);
+        }
+      } catch (err) {
+        console.error('[TypeType] tier leaderboard fetch failed', err);
+      }
+    }
+
+    this.renderTierLB('easy', tierData.easy, username);
+    this.renderTierLB('medium', tierData.medium, username);
+    this.renderTierLB('hard', tierData.hard, username);
+    this.renderTierLB('boss', tierData.boss, username);
   }
 
-  // ── Page 2: Daily Challenge (landing-only — real gameplay stays in DailyChallenge.ts) ──
+  private renderTierLB(tier: Tier, entries: { username: string; bestTimeMs: number }[], myUsername: string) {
+    const card = this.containerEl?.querySelector(`#lb-${tier}`) as HTMLElement;
+    if (!card) return;
+    
+    // Strictly limit to Top 3
+    const top3 = entries.slice(0, 3);
+
+    // Custom colors for the ranking titles
+    const titleColors: Record<Tier, string> = {
+      easy: '#8FD694',
+      medium: '#7CCBFF',
+      hard: '#CBB6FF',
+      boss: '#FF6B6B'
+    };
+    const titleColor = titleColors[tier];
+
+    let html = `
+      <div style="font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; color: ${titleColor}; margin-bottom: 4px; text-align: center;">
+        ${TIER_LABELS[tier]} Rankings
+      </div>
+    `;
+
+    if (top3.length === 0) {
+      html += `<div style="font-family: 'Nunito', sans-serif; font-size: 12px; color: #000000; text-align: center; padding: 4px; opacity: 0.7;">No records yet</div>`;
+    } else {
+      html += top3.map((e, i) => {
+        const isMe = e.username.toLowerCase() === myUsername.toLowerCase();
+        return `
+          <div style="font-family: 'Nunito', sans-serif; display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border-radius: 6px; font-size: 12px; margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+              <span style="font-weight: 800; color: #000000; width: 16px; flex-shrink: 0;">${i + 1}</span>
+              <span style="font-weight: 700; color: #000000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${e.username}</span>
+            </div>
+            <span style="font-weight: 800; color: #000000; flex-shrink: 0;">${(e.bestTimeMs / 1000).toFixed(3)}s</span>
+          </div>
+        `;
+      }).join('');
+    }
+    card.innerHTML = html;
+  }
+
+  // ── Page 2: Daily Challenge ──
 
   private renderDailyChallengePage(access: AccessResult, auth: AuthState) {
     const c = theme.color;
@@ -454,7 +520,7 @@ export class Home extends Phaser.Scene {
     });
   }
 
-  // ── Page 3: Endless (landing-only — real gameplay stays in EndlessMode.ts) ──
+  // ── Page 3: Endless ──
 
   private renderEndlessPage(access: AccessResult, auth: AuthState) {
     const c = theme.color;
@@ -487,7 +553,7 @@ export class Home extends Phaser.Scene {
     });
   }
 
-  // ── Page 4: Levels (landing-only — real gameplay stays in Levels.ts) ──
+  // ── Page 4: Levels ──
 
   private renderLevelsPage(auth: AuthState) {
     const c = theme.color;
@@ -522,7 +588,7 @@ export class Home extends Phaser.Scene {
     });
   }
 
-  // ── Auth + unlocks (drives every gated page's progress bar) ────────────
+  // ── Auth + unlocks ──
 
   private async refreshAuthAndUnlocks() {
     const identity = getIdentity();
@@ -543,25 +609,8 @@ export class Home extends Phaser.Scene {
   }
 }
 
-// ─── U-N-L-O-C-K progress bar ───────────────────────────────────────────────
-//
-// Per-page, letters light up toward THAT page's own next unlock target.
-// Each gated mode needs two things: all 4 ladder tiers cleared, and a
-// number of distinct days played. Those are two different kinds of
-// progress (a checklist vs a counter), so this combines them into one
-// 0-6 scale by averaging each as a fraction of its own requirement, then
-// lighting however many of the 6 letters that fraction covers — e.g.
-// tiers half cleared + 0 days played lands around 1-2 letters lit, while
-// tiers fully cleared + 5/7 days played lands around 5 letters lit.
-
 const UNLOCK_LETTERS = ['U', 'N', 'L', 'O', 'C', 'K'];
 
-// A whole locked page is blurred/dimmed EXCEPT one sharp teaser card poking
-// through on top — the blurred layer is decorative (a few bars standing in
-// for "hidden content" like a leaderboard), never real data, so it can't
-// misrepresent something that doesn't exist yet (Endless/Levels) or isn't
-// wired up yet (Daily Challenge's real leaderboard — see note in refresh
-// step). Swipe is never blocked here; only the mode's own entry point is.
 function renderLockedPageHTML(title: string, teaserLine: string, auth: AuthState, daysRequired: number): string {
   const c = theme.color;
   return `
@@ -585,9 +634,6 @@ function renderLockedPageHTML(title: string, teaserLine: string, auth: AuthState
 function tiersClearedCount(auth: AuthState): number {
   if (auth.unlocks.clearedAllTiers) return 4;
   const highest: Tier = phaserGame.registry.get('highestUnlockedTier') ?? 'easy';
-  // highestUnlockedTier is the tier currently unlocked/in-progress, so the
-  // number of tiers already fully CLEARED is its index in TIER_ORDER
-  // (0 while still on Easy, up to 3 once Boss is unlocked but not yet cleared).
   return TIER_ORDER.indexOf(highest);
 }
 
@@ -621,69 +667,120 @@ function renderUnlockProgress(auth: AuthState, daysRequired: number): string {
     </div>`;
 }
 
-// ─── Style helpers (ported from ChallengeCategories.ts) ────────────────────
+// ─── Style helpers (Invisible Buttons & Leaderboard Rows) ────────────────────
 
-function levelCard(t: Tier, highest: Tier, hasBadge: boolean) {
+function invisibleLevelButton(t: Tier, highest: Tier, hasBadge: boolean, top: string, height: string) {
   const unlocked = TIER_ORDER.indexOf(t) <= TIER_ORDER.indexOf(highest);
   const isCurrent = t === highest;
-  const c = theme.color;
-  const tierColor = TIER_COLORS[t];
-  const tierLabelColor = TIER_LABEL_TEXT_COLORS[t];
+  
   return `
     <div class="dd-level-card" data-tier="${t}" data-locked="${unlocked ? '0' : '1'}" style="
-      ${panel(`padding:14px 12px;${unlocked ? 'cursor:pointer;' : 'opacity:0.5;'}`)}
-      display:flex;flex-direction:column;gap:4px;
-      ${isCurrent ? `border-color:${tierColor};border-width:2px;box-shadow:0 2px 12px ${tierColor}33;` : ''}">
-      <span style="font-size:10px;color:${unlocked ? tierLabelColor : c.textMuted};font-weight:700;">Level ${TIER_NUMBER[t]}</span>
-      <span style="font-family:${theme.font.display};font-size:17px;font-weight:700;color:${c.textPrimary};">
-        ${TIER_LABELS[t]}
-      </span>
-      <span style="font-size:10px;color:${unlocked ? c.success : c.textMuted};font-weight:600;">
-        ${!unlocked ? '🔒 Locked' : hasBadge ? '🏅 Bonus cleared' : isCurrent ? 'Current' : 'Cleared'}
-      </span>
+      position: absolute;
+      top: ${top};
+      left: 0;
+      width: 100%;
+      height: ${height};
+      cursor: ${unlocked ? 'pointer' : 'default'};
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+      background: ${!unlocked ? 'rgba(0,0,0,0.4)' : 'transparent'};
+      border-radius: 8px;
+    ">
+      ${!unlocked ? '<div style="font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">🔒</div>' : ''}
+      ${isCurrent && unlocked ? '<div style="font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">▶</div>' : ''}
+      ${hasBadge && unlocked ? '<div style="font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">🏅</div>' : ''}
     </div>`;
 }
 
-function spinner(msg = 'Loading…') {
+function levelCard(t: Tier, highest: Tier, hasBadge: boolean, top: string, left: string) {
+  const unlocked = TIER_ORDER.indexOf(t) <= TIER_ORDER.indexOf(highest);
+  const isCurrent = t === highest;
+  
   return `
-    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px;">
-      <div style="width:20px;height:20px;border:2px solid ${theme.color.border};border-top:2px solid ${theme.color.accent};
+    <!-- Outer Wrapper: Handles positioning (Blue Box) -->
+    <div style="
+      position: absolute;
+      top: ${top};
+      left: ${left};
+      width: 100%;
+      height: 25%;
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      pointer-events: none; /* Lets you see the outer area */
+    ">
+      <!-- Inner Button: Fixed short height (Red Box) -->
+      <div class="dd-level-card" data-tier="${t}" data-locked="${unlocked ? '0' : '1'}" style="
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        height: 40px; /* Red box is now short, so it won't overlap! */
+        cursor: ${unlocked ? 'pointer' : 'default'};
+        pointer-events: auto;
+      ">
+        <img src="/images/${t}.png" alt="${TIER_LABELS[t]}" style="
+          display: block;
+          width: 80px;  /* Image stays big */
+          height: 80px; /* Image stays big */
+          object-fit: contain; 
+          pointer-events: none;
+          position: absolute; /* Image floats over the Red Box */
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%); /* Centers the image perfectly */
+          filter: ${!unlocked ? 'grayscale(100%) brightness(0.5)' : 'drop-shadow(0 4px 6px rgba(0,0,0,0.3))'};
+        " />
+        
+        <!-- Status Icons overlaid on top of the image -->
+        <div style="position: absolute; bottom: 4px; right: 4px; font-size: 16px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">
+          ${!unlocked ? '🔒' : hasBadge ? '🏅' : isCurrent ? '▶' : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+
+function spinner(msg = 'Loading...') {
+  return `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60px;gap:8px;padding:10px;">
+      <div style="width:18px;height:18px;border:2px solid #FFFFFF44;border-top:2px solid #FFFFFF;
                   border-radius:50%;animation:spin 0.9s linear infinite;"></div>
-      <span style="font-size:11px;color:${theme.color.textMuted};">${msg}</span>
+      <span style="font-size:10px;color:#FFFFFFAA;">${msg}</span>
     </div>`;
 }
 
 function lbRow(e: LadderEntry, i: number, myUsername: string, overtookMeUserIds?: Set<string>) {
-  const c = theme.color;
   const isMe = e.username.toLowerCase() === myUsername.toLowerCase();
   const justPassedMe = !!overtookMeUserIds?.has(e.userId);
-  const rankColor = i === 0 ? theme.palette.yellow : i === 1 ? c.textSecondary : i === 2 ? theme.palette.orange : c.textMuted;
+  const rankColor = i === 1 ? theme.palette.yellow : i === 2 ? '#C0C0C0' : i === 3 ? '#CD7F32' : '#FFFFFF99';
 
   let badgeHtml = '';
   if (e.clearedHiddenBonusTiers?.length) {
-    badgeHtml = `<span style="font-size:10px;font-weight:700;color:${theme.palette.orange};margin-right:5px;">🏅×${e.clearedHiddenBonusTiers.length}</span>`;
-  }
-  if (e.hasLimitBreakAward) {
-    badgeHtml += `<span style="font-size:10px;font-weight:700;color:${c.success};margin-right:5px;">⚡</span>`;
+    badgeHtml = `<span style="font-size:9px;font-weight:700;color:${theme.palette.yellow};margin-right:4px;">🏅</span>`;
   }
 
   return `
-    <div style="display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:10px;font-size:12px;
-      background:${isMe ? theme.color.accentDim : justPassedMe ? theme.palette.coral + '1a' : 'transparent'};">
+    <div style="display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;font-size:12px;
+      background:${isMe ? 'rgba(255, 255, 255, 0.15)' : justPassedMe ? 'rgba(240, 68, 82, 0.2)' : 'transparent'}}>
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
-          <span style="font-weight:700;color:${rankColor};width:20px;flex-shrink:0;">#${i + 1}</span>
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+          <span style="font-weight:800;color:${rankColor};width:20px;flex-shrink:0;font-size:13px;">#${i + 1}</span>
           <div style="display:flex;align-items:center;gap:3px;min-width:0;overflow:hidden;">
             ${badgeHtml}
-            <span style="font-weight:700;color:${e.hasLimitBreakAward ? c.success : c.textPrimary};
+            <span style="font-weight:600;color:${isMe ? theme.palette.yellow : '#FFFFFF'};
               overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.username}</span>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-          <span style="font-size:10px;color:${c.textMuted};font-weight:700;">${TIER_LABELS[e.highestTier]}</span>
-          <span style="color:${c.textPrimary};font-weight:700;font-family:${theme.font.mono};">${(e.bestTotalTimeMs / 1000).toFixed(3)}s</span>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <span style="color:#FFFFFF99;font-size:10px;font-weight:700;">${TIER_LABELS[e.highestTier]}</span>
+          <span style="color:#FFFFFF;font-weight:800;font-family:${theme.font.mono};font-size:13px;">${(e.bestTotalTimeMs / 1000).toFixed(3)}s</span>
         </div>
       </div>
-      ${justPassedMe ? `<span style="font-size:10px;font-weight:700;color:${theme.palette.coral};padding-left:29px;">🔥 ${e.username} passed you!</span>` : ''}
+      ${justPassedMe ? `<span style="font-size:9px;font-weight:700;color:${theme.palette.coral};padding-left:28px;">🔥 passed you!</span>` : ''}
     </div>`;
 }

@@ -3,7 +3,7 @@ import { phaserGame, getIdentity } from '../game';
 import { platform } from '../lib/standaloneAdapter';
 import { audioManager, type AudioManager } from '../lib/audio';
 import { buildInviteLink } from '../lib/identity';
-import { theme, panel, label, logoTitle, primaryButton } from '../lib/theme';
+import { theme, panel, label, logoTitle } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { TIER_ORDER, type LadderEntry, type SquadEntry, type Tier, type RankOvertake } from '../shared/types';
 
@@ -24,13 +24,6 @@ const TIER_LABEL_TEXT_COLORS: Record<Tier, string> = {
   boss: theme.palette.coral,
 };
 
-/**
- * Challenge Categories — the existing 4-tier ladder (Easy -> Boss) plus the
- * Friends/Squad leaderboard, kept together (not split out) per the locked
- * nav-restructuring scope. This is the same content that used to live
- * inline in MainMenu.ts before it became a hub; markup/logic unchanged,
- * only relocated + given a "Back to Menu" exit.
- */
 export class ChallengeCategories extends Phaser.Scene {
   private containerEl!: HTMLDivElement;
   private audio: AudioManager = audioManager;
@@ -44,8 +37,6 @@ export class ChallengeCategories extends Phaser.Scene {
   }
 
   create() {
-    // Phaser doesn't auto-call a method named `shutdown` — must bind explicitly
-    // (see Game.ts for the full explanation of why this matters everywhere).
     this.events.once('shutdown', this.shutdown, this);
     injectGlobalStyles();
     this.buildUI();
@@ -67,38 +58,92 @@ export class ChallengeCategories extends Phaser.Scene {
     document.getElementById('game-container')?.appendChild(shell);
     this.containerEl = shell.querySelector('#cc-frame') as HTMLDivElement;
 
-    this.containerEl.style.cssText += `padding:18px 16px calc(16px + env(safe-area-inset-bottom,0px));
-      display:flex;flex-direction:column;gap:16px;font-family:${theme.font.body};color:${c.textPrimary};`;
+    this.containerEl.style.cssText += `
+      padding: 0 0 80px 0; 
+      font-family: ${theme.font.body};
+      color: ${c.textPrimary};
+      background: linear-gradient(180deg, #FF9A9E 0%, #FECFEF 100%); /* Sunset Playground Sky */
+      position: relative;
+      overflow-y: auto;
+      overflow-x: hidden;
+    `;
 
     this.containerEl.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        ${logoTitle('TypeType', 24, false)}
+      <style>
+        .bunting {
+          position: absolute; top: 0; left: 0; right: 0; height: 20px; 
+          display: flex; justify-content: space-around; pointer-events: none; z-index: 0;
+        }
+        .flag {
+          width: 24px; height: 24px; 
+          clip-path: polygon(0 0, 100% 0, 50% 100%);
+          opacity: 0.8;
+        }
+      </style>
+
+      <div class="bunting">
+        <div class="flag" style="background:${c.accent};"></div>
+        <div class="flag" style="background:${c.success};"></div>
+        <div class="flag" style="background:${c.warning};"></div>
+        <div class="flag" style="background:${c.danger};"></div>
+        <div class="flag" style="background:${c.accent};"></div>
+        <div class="flag" style="background:${c.success};"></div>
+        <div class="flag" style="background:${c.warning};"></div>
+        <div class="flag" style="background:${c.danger};"></div>
       </div>
 
-      <div>
-        ${label('Choose a level', c.textSecondary)}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
-          ${TIER_ORDER.map(t => levelCard(t, highestTier, !!badges[t])).join('')}
+      <div style="position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100%; box-sizing: border-box; padding: 30px 16px 20px;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          ${logoTitle('TypeType', 24, false)}
+          <button id="btn-back" style="
+            background: transparent; border: 1px solid ${c.borderStrong}; 
+            color: ${c.textSecondary}; border-radius: 20px; padding: 8px 16px; 
+            font-size: 12px; font-weight: 700; cursor: pointer;">
+            Menu
+          </button>
         </div>
-      </div>
 
-      <div style="display:flex;flex-direction:column;flex:1;min-height:220px;">
-        <div style="margin-bottom:8px;">
-          ${label('Friends', c.textSecondary)}
-        </div>
-        <div id="lb-card" style="${panel('padding:10px;')}flex:1;min-height:160px;overflow-y:auto;
-          display:flex;flex-direction:column;justify-content:center;align-items:center;">
+        <!-- Rival Card -->
+        <div id="rival-card" style="
+          ${panel('padding: 14px;')}
+          margin-bottom: 20px; border: 1px solid ${c.accent}33; 
+          background: ${c.bgCard}; border-radius: 16px;
+          display: flex; align-items: center; justify-content: center; min-height: 60px;">
           ${spinner()}
         </div>
+
+        <!-- Tower Section -->
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; margin-bottom: 24px;">
+          <!-- Reverse order so Boss is at Top, Easy at Bottom -->
+          ${[...TIER_ORDER].reverse().map(t => levelCard(t, highestTier, !!badges[t])).join('')}
+        </div>
+
+        <!-- Leaderboard Section -->
+        <div>
+          <div style="margin-bottom: 8px;">
+            ${label('Friends Ranking', c.textSecondary)}
+          </div>
+          <div id="lb-card" style="
+            ${panel('padding: 8px;')} 
+            border-radius: 16px; min-height: 100px; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 4px;">
+            ${spinner()}
+          </div>
+        </div>
+
       </div>
 
+      <!-- Floating Invite Button -->
       <button id="btn-invite" style="
-        width:100%;padding:12px 0;background:transparent;border:1px dashed ${c.borderStrong};border-radius:12px;
-        color:${c.textSecondary};font-family:${theme.font.body};font-weight:600;font-size:12.5px;cursor:pointer;">
-        Invite friends
+        position: absolute; bottom: 20px; right: 16px; z-index: 10;
+        width: 56px; height: 56px; border-radius: 50%; 
+        background: ${c.accent}; border: none; box-shadow: 0 4px 12px ${c.accent}66;
+        color: white; font-size: 24px; font-weight: 800; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        -webkit-tap-highlight-color: transparent;">
+        +
       </button>
-
-      ${primaryButton('Back to Menu', 'btn-back', 'margin-top:4px;')}
     `;
 
     this.bindEvents();
@@ -123,10 +168,8 @@ export class ChallengeCategories extends Phaser.Scene {
       try {
         await navigator.clipboard.writeText(link);
         const btn = this.containerEl.querySelector('#btn-invite') as HTMLButtonElement;
-        const original = btn.textContent;
-        btn.textContent = 'Link copied!';
-        btn.style.color = theme.color.success;
-        setTimeout(() => { if (btn) { btn.textContent = original; btn.style.color = theme.color.textSecondary; } }, 2000);
+        btn.innerHTML = `<span style="font-size: 10px; font-weight: 700;">Copied!</span>`;
+        setTimeout(() => { if (btn) btn.innerHTML = '+'; }, 2000);
       } catch {
         prompt('Copy your invite link:', link);
       }
@@ -140,13 +183,14 @@ export class ChallengeCategories extends Phaser.Scene {
 
   private async refreshLeaderboard() {
     const lbCard = this.containerEl?.querySelector('#lb-card') as HTMLElement;
-    if (lbCard) {
-      lbCard.style.justifyContent = 'center';
-      lbCard.innerHTML = spinner();
-    }
+    const rivalCard = this.containerEl?.querySelector('#rival-card') as HTMLElement;
+    const c = theme.color;
+
+    if (lbCard) lbCard.innerHTML = spinner();
+    if (rivalCard) rivalCard.innerHTML = spinner();
 
     const identity = getIdentity();
-    const username = identity?.username ?? '';
+    const myUsername = identity?.username ?? '';
 
     let entries: LadderEntry[] | SquadEntry[] = [];
     let overtookMeUserIds = new Set<string>();
@@ -162,29 +206,71 @@ export class ChallengeCategories extends Phaser.Scene {
       }
     } catch (err) {
       console.error('[DigitDash] leaderboard fetch failed', err);
-      if (lbCard) {
-        lbCard.innerHTML = `<div style="color:${theme.color.textMuted};font-size:12px;text-align:center;padding:16px;">
-          Couldn't load the leaderboard. Try again shortly.</div>`;
-      }
+      if (lbCard) lbCard.innerHTML = `<div style="color:${c.textMuted};font-size:12px;text-align:center;padding:16px;">Couldn't load the leaderboard. Try again shortly.</div>`;
+      if (rivalCard) rivalCard.innerHTML = `<div style="color:${c.textMuted};font-size:12px;">Couldn't load rivals.</div>`;
       return;
     }
 
     phaserGame.registry.set('ladder', entries);
-    if (!lbCard) return;
+    
+    if (!lbCard || !rivalCard) return;
 
+    // --- Update Rival Card ---
     if (entries.length === 0) {
-      lbCard.style.justifyContent = 'center';
+      rivalCard.innerHTML = `
+        <div style="text-align: center; color: ${c.textSecondary}; font-size: 13px;">
+          Invite friends to start competing!
+        </div>`;
+    } else {
+      const myIndex = entries.findIndex(e => e.username.toLowerCase() === myUsername.toLowerCase());
+      
+      if (myIndex === -1) {
+        rivalCard.innerHTML = `
+          <div style="text-align: center; color: ${c.textSecondary}; font-size: 13px;">
+            Play a round to get on the board!
+          </div>`;
+      } else if (myIndex === 0 && entries.length > 1) {
+        // I am 1st place
+        const second = entries[1] as LadderEntry;
+        const diff = ((second.bestTotalTimeMs - (entries[0] as LadderEntry).bestTotalTimeMs) / 1000).toFixed(3);
+        rivalCard.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: ${c.warning}; display: flex; align-items: center; justify-content: center; font-weight: 800; color: ${c.bg};">1</div>
+            <div style="flex: 1;">
+              <div style="font-size: 12px; color: ${c.textSecondary};">You are #1!</div>
+              <div style="font-size: 14px; font-weight: 700; color: ${c.textPrimary};">${second.username} is ${diff}s behind you. Don't let up!</div>
+            </div>
+          </div>`;
+      } else if (myIndex > 0) {
+        // I have a rival ahead of me
+        const rival = entries[myIndex - 1] as LadderEntry;
+        const me = entries[myIndex] as LadderEntry;
+        const diff = ((rival.bestTotalTimeMs - me.bestTotalTimeMs) / 1000).toFixed(3);
+        rivalCard.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: ${c.accentDim}; display: flex; align-items: center; justify-content: center; font-weight: 800; color: ${c.accent};">⚡</div>
+            <div style="flex: 1;">
+              <div style="font-size: 12px; color: ${c.textSecondary};">Catch ${rival.username}! (${(rival.bestTotalTimeMs / 1000).toFixed(3)}s)</div>
+              <div style="font-size: 14px; font-weight: 700; color: ${c.accent};">Beat them by ${diff}s to take rank #${myIndex}.</div>
+            </div>
+          </div>`;
+      } else {
+        rivalCard.innerHTML = `<div style="color:${c.textMuted};font-size:12px;">You are ranked!</div>`;
+      }
+    }
+
+    // --- Update Leaderboard Card ---
+    if (entries.length === 0) {
       lbCard.innerHTML = `
-        <div style="color:${theme.color.textMuted};font-size:12px;text-align:center;padding:20px;">
-          No friends yet — invite someone to see them here.
+        <div style="color:${c.textMuted};font-size:12px;text-align:center;padding:20px;">
+          No friends yet — tap the + button to invite someone!
         </div>`;
       return;
     }
 
-    lbCard.style.justifyContent = 'flex-start';
     lbCard.innerHTML = `
       <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
-        ${entries.map((e, i) => lbRow(e, i, username, overtookMeUserIds)).join('')}
+        ${entries.map((e, i) => lbRow(e, i, myUsername, overtookMeUserIds)).join('')}
       </div>`;
   }
 }
@@ -197,22 +283,37 @@ function levelCard(t: Tier, highest: Tier, hasBadge: boolean) {
   const c = theme.color;
   const tierColor = TIER_COLORS[t];
   const tierLabelColor = TIER_LABEL_TEXT_COLORS[t];
+  
   return `
     <div class="dd-level-card" data-tier="${t}" data-locked="${unlocked ? '0' : '1'}" style="
-      ${panel(`padding:14px 12px;${unlocked ? 'cursor:pointer;' : 'opacity:0.5;'}`)}
-      display:flex;flex-direction:column;gap:4px;
-      ${isCurrent ? `border-color:${tierColor};border-width:2px;box-shadow:0 2px 12px ${tierColor}33;` : ''}">
-      <span style="font-size:10px;color:${unlocked ? tierLabelColor : c.textMuted};font-weight:700;">Level ${TIER_NUMBER[t]}</span>
-      <span style="font-family:${theme.font.display};font-size:17px;font-weight:700;color:${c.textPrimary};">
-        ${TIER_LABELS[t]}
-      </span>
-      <span style="font-size:10px;color:${unlocked ? c.success : c.textMuted};font-weight:600;">
-        ${!unlocked ? '🔒 Locked' : hasBadge ? '🏅 Bonus cleared' : isCurrent ? 'Current' : 'Cleared'}
-      </span>
+      background: ${c.bgCard};
+      border: 2px solid ${isCurrent ? tierColor : c.border};
+      border-bottom: 4px solid ${isCurrent ? tierColor : c.borderStrong};
+      border-radius: 12px;
+      padding: 14px 18px;
+      ${unlocked ? 'cursor: pointer;' : 'opacity: 0.6;'}
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between;
+      box-shadow: ${isCurrent ? `0 4px 12px ${tierColor}33` : 'none'};
+      transition: transform 0.1s;">
+      
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 10px; color: ${unlocked ? tierLabelColor : c.textMuted}; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">
+          Level ${TIER_NUMBER[t]}
+        </span>
+        <span style="font-family: ${theme.font.display}; font-size: 18px; font-weight: 800; color: ${c.textPrimary};">
+          ${TIER_LABELS[t]}
+        </span>
+      </div>
+      
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: ${unlocked ? c.success : c.textMuted};">
+        ${!unlocked ? '🔒 Locked' : hasBadge ? '🏅 Bonus cleared' : isCurrent ? '▶ Current' : '✓ Cleared'}
+      </div>
     </div>`;
 }
 
-function spinner(msg = 'Loading…') {
+function spinner(msg = 'Loading...') {
   return `
     <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px;">
       <div style="width:20px;height:20px;border:2px solid ${theme.color.border};border-top:2px solid ${theme.color.accent};
@@ -236,11 +337,11 @@ function lbRow(e: LadderEntry, i: number, myUsername: string, overtookMeUserIds?
   }
 
   return `
-    <div style="display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:10px;font-size:12px;
+    <div style="display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;font-size:13px;
       background:${isMe ? theme.color.accentDim : justPassedMe ? theme.palette.coral + '1a' : 'transparent'};">
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
-          <span style="font-weight:700;color:${rankColor};width:20px;flex-shrink:0;">#${i + 1}</span>
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+          <span style="font-weight:800;color:${rankColor};width:24px;flex-shrink:0;font-size:14px;">#${i + 1}</span>
           <div style="display:flex;align-items:center;gap:3px;min-width:0;overflow:hidden;">
             ${badgeHtml}
             <span style="font-weight:700;color:${e.hasLimitBreakAward ? c.success : c.textPrimary};
@@ -248,10 +349,10 @@ function lbRow(e: LadderEntry, i: number, myUsername: string, overtookMeUserIds?
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-          <span style="font-size:10px;color:${c.textMuted};font-weight:700;">${TIER_LABELS[e.highestTier]}</span>
-          <span style="color:${c.textPrimary};font-weight:700;font-family:${theme.font.mono};">${(e.bestTotalTimeMs / 1000).toFixed(3)}s</span>
+          <span style="font-size:10px;color:${c.textMuted};font-weight:700;text-transform:uppercase;">${TIER_LABELS[e.highestTier]}</span>
+          <span style="color:${c.textPrimary};font-weight:800;font-family:${theme.font.mono};font-size:14px;">${(e.bestTotalTimeMs / 1000).toFixed(3)}s</span>
         </div>
       </div>
-      ${justPassedMe ? `<span style="font-size:10px;font-weight:700;color:${theme.palette.coral};padding-left:29px;">🔥 ${e.username} passed you!</span>` : ''}
+      ${justPassedMe ? `<span style="font-size:10px;font-weight:700;color:${theme.palette.coral};padding-left:34px;">🔥 ${e.username} passed you!</span>` : ''}
     </div>`;
 }
