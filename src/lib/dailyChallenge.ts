@@ -181,3 +181,52 @@ export async function fetchDailyLeaderboard(
     bonusStagesCleared: r.bonus_stages_cleared,
   }));
 }
+
+export interface WeeklyLeaderboardEntry {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  weeklyScore: number;
+  dailyWins: number;
+}
+
+/**
+ * Fetches the current week's cumulative leaderboard (Monday - Sunday).
+ * Sorted by Daily Wins, then by Total Weekly Score.
+ */
+export async function fetchWeeklyLeaderboard(): Promise<WeeklyLeaderboardEntry[]> {
+  const { data, error } = await supabase.rpc('get_weekly_leaderboard', { is_last_week: false });
+
+  if (error) {
+    console.error('[TypeType] fetchWeeklyLeaderboard failed:', error.message);
+    return [];
+  }
+
+  return (data ?? []).map((r: any) => ({
+    userId: r.user_id,
+    username: r.username,
+    avatarUrl: r.avatar_url,
+    weeklyScore: r.weekly_score,
+    dailyWins: r.daily_wins,
+  }));
+}
+
+/**
+ * Fetches the Top 3 players from last week to display on the Award card.
+ */
+export async function fetchLastWeekChampions(limit = 3): Promise<WeeklyLeaderboardEntry[]> {
+  const { data, error } = await supabase.rpc('get_weekly_leaderboard', { is_last_week: true });
+
+  if (error) {
+    console.error('[TypeType] fetchLastWeekChampions failed:', error.message);
+    return [];
+  }
+
+  return (data ?? []).slice(0, limit).map((r: any) => ({
+    userId: r.user_id,
+    username: r.username,
+    avatarUrl: r.avatar_url,
+    weeklyScore: r.weekly_score,
+    dailyWins: r.daily_wins,
+  }));
+}

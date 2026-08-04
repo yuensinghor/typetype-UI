@@ -1,3 +1,5 @@
+import { fetchDailyLeaderboard, fetchWeeklyLeaderboard, fetchLastWeekChampions, type DailyLeaderboardEntry, type WeeklyLeaderboardEntry } from '../lib/dailyChallenge';
+import { fetchDailyLeaderboard, type DailyLeaderboardEntry } from '../lib/dailyChallenge';
 import { supabase } from '../lib/supabaseClient';
 import Phaser from 'phaser';
 import { phaserGame, getIdentity } from '../game';
@@ -121,6 +123,8 @@ export class Home extends Phaser.Scene {
   private activePage = 0;
   private onInstallReady?: () => void;
   private onAppInstalled?: () => void;
+  private dailyCountdownInterval?: number;
+  private dailyCountdownInterval?: number;
 
   constructor() {
     super('Home');
@@ -140,6 +144,7 @@ export class Home extends Phaser.Scene {
   }
 
   shutdown() {
+    if (this.dailyCountdownInterval) clearInterval(this.dailyCountdownInterval); // <--- ADD THIS LINE
     if (this.onInstallReady) window.removeEventListener('dd-install-ready', this.onInstallReady);
     if (this.onAppInstalled) window.removeEventListener('appinstalled', this.onAppInstalled);
     this.containerEl?.closest('.dd-shell')?.remove();
@@ -489,7 +494,7 @@ export class Home extends Phaser.Scene {
 
   // ── Page 2: Daily Challenge ──
 
-  private renderDailyChallengePage(access: AccessResult, auth: AuthState) {
+    private renderDailyChallengePage(access: AccessResult, auth: AuthState) {
     const c = theme.color;
     const page = this.containerEl.querySelector('#page-daily_challenge') as HTMLElement;
     const locked = access.reason === 'guest_not_allowed' || access.reason === 'locked';
@@ -502,22 +507,244 @@ export class Home extends Phaser.Scene {
       return;
     }
 
+    page.style.padding = '0';
+    page.style.background = 'none';
+
     page.innerHTML = `
-      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;">
-        <div style="${panel('padding:28px 22px;')}max-width:320px;display:flex;flex-direction:column;gap:10px;align-items:center;">
-          <span style="font-family:${theme.font.display};font-size:20px;font-weight:800;color:${c.textPrimary};">
+      <img src="/images/dailychallengebackground.png" alt="Daily Challenge Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
+
+            <div style="position: relative; z-index: 1; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; text-align: center; padding: 8px 16px;">
+        
+        <!-- Main Title -->
+        <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0;">
+          <span style="font-family: 'Fredoka', sans-serif; font-size: 22px; font-weight: 700; color: ${c.textPrimary}; text-shadow: 1px 1px 2px rgba(255,255,255,0.4);">
             Daily Challenge
           </span>
-          <span style="font-size:12.5px;color:${c.textMuted};">A new puzzle every day. Global leaderboard.</span>
         </div>
-        ${primaryButton('Start', 'btn-start-daily', 'max-width:320px;')}
+
+        <!-- Last Week's Top 3 Award Card -->
+        <div style="flex-shrink:0;">
+          <div style="font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: #000000; margin-bottom: 4px; text-align: center;">
+            🏆 Last Week's Champions
+          </div>
+          <div id="dc-awards-card" style="
+            background: url('/images/dailybox.png') no-repeat center 46%; 
+            background-size: 120% 250%; 
+            aspect-ratio: 3 / 1; 
+            border-radius: 20px; 
+            padding: 15px; 
+            display:flex; justify-content:space-around; align-items:center;">
+            ${spinner()}
+          </div>
+        </div>
+
+        <!-- Side-by-Side Leaderboards: Today & This Week -->
+        <div style="display: flex; gap: 12px; flex: 1; min-height: 0;">
+          
+          <!-- Left Column: Today Top 10 + Clock -->
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+            
+            <!-- Title Image -->
+            <div style="height: 40px; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; flex-shrink: 0;">
+              <img src="/images/top10.png" alt="Today Top 10" style="max-height: 100%; max-width: 100%; width: auto; height: auto;" />
+            </div>
+
+            <!-- Ranking Box (Changed to a fixed height so it stays small) -->
+            <div id="daily-lb-today" style="
+              background: url('/images/dailybox.png') no-repeat center center; 
+              background-size: 150% 400%; 
+              border-radius: 12px; 
+              padding: 15px 10px; 
+              height: 300px; /* Change this number to make the box taller or shorter! */
+              overflow-y: auto; 
+              display:flex; flex-direction:column; gap:4px; min-height: 0; flex-shrink: 0;">
+              ${spinner()}
+            </div>
+
+            <!-- Clock Countdown (Back to your big size, stacked normally) -->
+            <div style="
+              position: relative; 
+              width: 200px; 
+              height: 180px; 
+              margin: 0px auto 0 auto; 
+              flex-shrink: 0; 
+              display: flex; align-items: center; justify-content: center; 
+              background: url('/images/clock.png') no-repeat center center; 
+              background-size: contain;">
+              <span id="daily-countdown" style="
+                font-family: ${theme.font.mono}; 
+                font-weight: 800; 
+                font-size: 25px; 
+                color: ${c.accentBright}; 
+                position: absolute; 
+                top: 61%; 
+                left: 67%; 
+                transform: translate(-50%, -50%); 
+                text-align: center; 
+                width: 100%;">
+                00:00:00
+              </span>
+            </div>
+          </div>
+
+          <!-- Right Column: This Week Top 10 -->
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+            <!-- Title Image -->
+            <div style="height: 40px; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; flex-shrink: 0;">
+              <img src="/images/weektop10.png" alt="This Week Top 10" style="max-height: 100%; max-width: 100%; width: auto; height: auto;" />
+            </div>
+            
+            <!-- Ranking Box -->
+            <div id="daily-lb-weekly" style="
+              background: url('/images/dailybox.png') no-repeat center center; 
+              background-size: 150% 400%; 
+              border-radius: 12px; 
+              padding: 15px 10px; 
+              flex: 1; overflow-y: auto; display:flex; flex-direction:column; gap:4px; min-height: 0;">
+              ${spinner()}
+            </div>
+
+            <!-- Invisible spacer (Updated to 110px to match the left clock + margin) -->
+            <div style="height: 110px; flex-shrink: 0;"></div>
+          </div>
+        </div>
+
+        <button id="btn-start-daily" style="
+          background: ${theme.color.accent}; color: #FFFFFF; border: none; 
+          border-radius: 12px; padding: 12px 0; width: 100%; max-width: 320px; 
+          font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 16px; 
+          cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); margin: 0 auto; flex-shrink:0;">
+          Start Today's Challenge
+        </button>
+
       </div>
     `;
+
+    this.startDailyCountdown();
+    this.refreshDailyAwards();
+    this.refreshDailyLeaderboard();
 
     page.querySelector('#btn-start-daily')?.addEventListener('click', () => {
       this.audio.playClick();
       this.scene.start('DailyChallenge', { audio: this.audio });
     });
+  }
+
+  private async refreshDailyLeaderboard() {
+    const todayCard = this.containerEl?.querySelector('#daily-lb-today') as HTMLElement;
+    const weeklyCard = this.containerEl?.querySelector('#daily-lb-weekly') as HTMLElement;
+    
+    if (!todayCard || !weeklyCard) return;
+    
+    const c = theme.color;
+    const identity = getIdentity();
+    const myUserId = identity?.userId ?? '';
+    const today = new Date().toISOString().split('T')[0];
+
+    try {
+      // Fetch both at the same time
+      const [todayEntries, weeklyEntries] = await Promise.all([
+        fetchDailyLeaderboard(today, 10),
+        fetchWeeklyLeaderboard()
+      ]);
+
+      // Render Today
+      if (todayEntries.length === 0) {
+        todayCard.innerHTML = `<div style="color:${c.textMuted};font-size:11px;text-align:center;padding:20px;">No scores yet.</div>`;
+      } else {
+        todayCard.innerHTML = todayEntries.map((e, i) => this.renderDailyLbRow(e, i, myUserId, false)).join('');
+      }
+
+      // Render Weekly
+      if (weeklyEntries.length === 0) {
+        weeklyCard.innerHTML = `<div style="color:${c.textMuted};font-size:11px;text-align:center;padding:20px;">No scores yet.</div>`;
+      } else {
+        weeklyCard.innerHTML = weeklyEntries.map((e, i) => this.renderDailyLbRow(e, i, myUserId, true)).join('');
+      }
+    } catch (err) {
+      console.error('[TypeType] daily leaderboard fetch failed', err);
+    }
+  }
+
+  private renderDailyLbRow(e: any, i: number, myUserId: string, isWeekly: boolean) {
+    const c = theme.color;
+    const isMe = !!myUserId && e.userId === myUserId;
+    const rankColor = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : c.textMuted;
+    
+    const mainScore = isWeekly ? `${e.weeklyScore}` : `${e.totalScore}`;
+    const winBadge = isWeekly && e.dailyWins > 0 ? `<span style="font-size:9px;font-weight:700;color:${c.warning};margin-right:3px;">🏆${e.dailyWins}</span>` : '';
+    const bonusBadge = !isWeekly && e.reachedBonus ? `<span style="font-size:9px;font-weight:700;color:${c.warning};margin-right:3px;">🔥${e.bonusStagesCleared}</span>` : '';
+
+    return `
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 6px; border-radius:6px; font-size:11px; background:${isMe ? 'rgba(0,0,0,0.1)' : 'transparent'}; font-family: 'Nunito', sans-serif;">
+        <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1;">
+          <span style="font-weight:800; color:${rankColor}; width:18px; flex-shrink:0;">${i + 1}</span>
+          <span style="font-weight:700; color:#000000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            ${winBadge}${bonusBadge}${e.username}
+          </span>
+        </div>
+        <span style="color:#000000; font-weight:800; flex-shrink:0;">${mainScore}</span>
+      </div>
+    `;
+  }
+
+  private async refreshDailyAwards() {
+    const card = this.containerEl?.querySelector('#dc-awards-card') as HTMLElement;
+    if (!card) return;
+
+    try {
+      const champions = await fetchLastWeekChampions(3);
+      const c = theme.color;
+
+      if (champions.length === 0) {
+        card.innerHTML = `<div style="font-size:12px; color:${c.textMuted}; text-align:center;">No champions crowned last week.</div>`;
+        return;
+      }
+
+      const medals = ['🥇', '🥈', '🥉'];
+      
+      card.innerHTML = champions.map((champ, i) => `
+        <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex:1;">
+          <span style="font-size: 20px;">${medals[i] || '🏅'}</span>
+          <span style="font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700; color: ${c.textPrimary}; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${champ.username}
+          </span>
+          <span style="font-family: 'Nunito', sans-serif; font-size: 10px; color: ${c.textMuted};">
+            ${champ.dailyWins} Wins
+          </span>
+          <span style="font-family: 'Nunito', sans-serif; font-size: 10px; font-weight: 700; color: ${c.accentBright};">
+            ${champ.weeklyScore} pts
+          </span>
+        </div>
+      `).join('');
+    } catch (err) {
+      console.error('[TypeType] daily awards fetch failed', err);
+      card.innerHTML = `<div style="font-size:12px; color:${c.textMuted}; text-align:center;">Couldn't load champions.</div>`;
+    }
+  }
+
+  private startDailyCountdown() {
+    const updateCountdown = () => {
+      const now = new Date();
+      // Get midnight UTC for tomorrow
+      const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+      const diff = tomorrow.getTime() - now.getTime();
+      
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      const el = this.containerEl?.querySelector('#daily-countdown');
+      if (el) {
+        // Pad with leading zeros so it looks like 10:05:09 instead of 10:5:9
+        el.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      } else if (this.dailyCountdownInterval) {
+        clearInterval(this.dailyCountdownInterval);
+      }
+    };
+    
+    updateCountdown(); // Call once immediately
+    this.dailyCountdownInterval = window.setInterval(updateCountdown, 1000);
   }
 
   // ── Page 3: Endless ──
