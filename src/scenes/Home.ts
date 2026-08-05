@@ -130,8 +130,12 @@ export class Home extends Phaser.Scene {
     super('Home');
   }
 
-  init(data: { audio?: AudioManager }) {
+  init(data: { audio?: AudioManager, returnToTab?: number }) {
     if (data?.audio) this.audio = data.audio;
+    // Remember which tab we were on when returning from a game
+    if (data?.returnToTab !== undefined) {
+      this.activePage = data.returnToTab;
+    }
   }
 
   create() {
@@ -181,17 +185,17 @@ export class Home extends Phaser.Scene {
       </div>
 
       <div class="home-panels" id="home-panels">
-        <div class="home-page active" id="page-challenge_categories"></div>
-        <div class="home-page" id="page-daily_challenge"></div>
-        <div class="home-page" id="page-endless"></div>
-        <div class="home-page" id="page-levels"></div>
+        <div class="home-page ${this.activePage === 0 ? 'active' : ''}" id="page-challenge_categories"></div>
+        <div class="home-page ${this.activePage === 1 ? 'active' : ''}" id="page-daily_challenge"></div>
+        <div class="home-page ${this.activePage === 2 ? 'active' : ''}" id="page-endless"></div>
+        <div class="home-page ${this.activePage === 3 ? 'active' : ''}" id="page-levels"></div>
       </div>
 
       <div class="home-tabbar" id="home-tabbar">
-        <button class="home-tab active" data-tab="0" aria-label="Friends">${ICON_TAB_FRIENDS}<span>Friends</span></button>
-        <button class="home-tab" data-tab="1" aria-label="Daily">${ICON_TAB_DAILY}<span>Daily</span></button>
-        <button class="home-tab" data-tab="2" aria-label="Endless">${ICON_TAB_ENDLESS}<span>Endless</span></button>
-        <button class="home-tab" data-tab="3" aria-label="Levels">${ICON_TAB_LEVELS}<span>Levels</span></button>
+        <button class="home-tab ${this.activePage === 0 ? 'active' : ''}" data-tab="0" aria-label="Friends">${ICON_TAB_FRIENDS}<span>Friends</span></button>
+        <button class="home-tab ${this.activePage === 1 ? 'active' : ''}" data-tab="1" aria-label="Daily">${ICON_TAB_DAILY}<span>Daily</span></button>
+        <button class="home-tab ${this.activePage === 2 ? 'active' : ''}" data-tab="2" aria-label="Endless">${ICON_TAB_ENDLESS}<span>Endless</span></button>
+        <button class="home-tab ${this.activePage === 3 ? 'active' : ''}" data-tab="3" aria-label="Levels">${ICON_TAB_LEVELS}<span>Levels</span></button>
       </div>
     `;
 
@@ -199,8 +203,8 @@ export class Home extends Phaser.Scene {
     audioManager.startMenuMusic();
 
     this.renderChallengeCategoriesPage();
-    this.renderDailyChallengePage({ allowed: false, reason: 'locked' }, this.auth);
-    this.renderEndlessPage({ allowed: false, reason: 'locked' }, this.auth);
+    this.renderDailyChallengePage({ allowed: false, reason: 'loading' }, this.auth);
+    this.renderEndlessPage({ allowed: false, reason: 'loading' }, this.auth);
     this.renderLevelsPage(this.auth);
 
     this.bindShellEvents();
@@ -494,9 +498,16 @@ export class Home extends Phaser.Scene {
 
   // ── Page 2: Daily Challenge ──
 
-      private renderDailyChallengePage(access: AccessResult, auth: AuthState) {
+  private renderDailyChallengePage(access: AccessResult, auth: AuthState) {
     const c = theme.color;
     const page = this.containerEl.querySelector('#page-daily_challenge') as HTMLElement;
+
+    // 1. Show spinner while checking Google login
+    if (access.reason === 'loading') {
+      page.innerHTML = `<div style="flex:1; display:flex; align-items:center; justify-content:center;">${spinner()}</div>`;
+      return;
+    }
+
     const locked = access.reason === 'guest_not_allowed' || access.reason === 'locked';
 
     if (locked) {
@@ -762,6 +773,13 @@ export class Home extends Phaser.Scene {
   private renderEndlessPage(access: AccessResult, auth: AuthState) {
     const c = theme.color;
     const page = this.containerEl.querySelector('#page-endless') as HTMLElement;
+
+    // 1. Show spinner while checking Google login
+    if (access.reason === 'loading') {
+      page.innerHTML = `<div style="flex:1; display:flex; align-items:center; justify-content:center;">${spinner()}</div>`;
+      return;
+    }
+
     const locked = access.reason === 'guest_not_allowed' || access.reason === 'locked';
 
     if (locked) {

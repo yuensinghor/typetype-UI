@@ -553,7 +553,8 @@ export class DailyChallenge extends Phaser.Scene {
     this.timerEvent?.destroy();
     if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
     this.audio.stopMusic();
-    this.scene.start('Home');
+    // Pass returnToTab: 1 so Home opens on the Daily tab
+    this.scene.start('Home', { returnToTab: 1 });
   }
 
   // ── Input handling ───────────────────────────────────────────────────
@@ -763,14 +764,27 @@ export class DailyChallenge extends Phaser.Scene {
     const bonusStagesCleared = bonusResults.filter(r => r.status === 'correct').length;
 
     const identity = getIdentity();
+    
+    // Show submitting screen first
+    this.containerEl.innerHTML = `
+      <div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;">
+        ${dcSpinner('Submitting score...')}
+      </div>
+    `;
+
+    // AWAIT the score submission so we don't load Home before Supabase saves it
     if (identity && !identity.isGuest) {
-      submitDailyChallengeRun(identity.userId, {
-        challengeDate: this.challengeDate,
-        results: this.results,
-        totalScore,
-        reachedBonus: this.reachedBonus,
-        bonusStagesCleared,
-      }).catch(err => console.error('[TypeType] submitDailyChallengeRun error:', err));
+      try {
+        await submitDailyChallengeRun(identity.userId, {
+          challengeDate: this.challengeDate,
+          results: this.results,
+          totalScore,
+          reachedBonus: this.reachedBonus,
+          bonusStagesCleared,
+        });
+      } catch (err) {
+        console.error('[TypeType] submitDailyChallengeRun error:', err);
+      }
     }
 
     const c = theme.color;
@@ -807,7 +821,8 @@ export class DailyChallenge extends Phaser.Scene {
     this.containerEl.querySelector('#btn-back')?.addEventListener('click', () => {
       this.audio.playClick();
       this.containerEl?.closest('.dd-shell')?.remove();
-      this.scene.start('Home');
+      // Pass returnToTab: 1 so Home opens on the Daily tab
+      this.scene.start('Home', { returnToTab: 1 });
     });
   }
 
