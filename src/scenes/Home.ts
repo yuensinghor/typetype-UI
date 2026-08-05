@@ -494,7 +494,7 @@ export class Home extends Phaser.Scene {
 
   // ── Page 2: Daily Challenge ──
 
-    private renderDailyChallengePage(access: AccessResult, auth: AuthState) {
+      private renderDailyChallengePage(access: AccessResult, auth: AuthState) {
     const c = theme.color;
     const page = this.containerEl.querySelector('#page-daily_challenge') as HTMLElement;
     const locked = access.reason === 'guest_not_allowed' || access.reason === 'locked';
@@ -513,26 +513,32 @@ export class Home extends Phaser.Scene {
     page.innerHTML = `
       <img src="/images/dailychallengebackground.png" alt="Daily Challenge Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
 
-            <div style="position: relative; z-index: 1; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; text-align: center; padding: 8px 16px;">
+      <!-- LOCKED WRAPPER: overflow hidden guarantees 1 single page, no scrollbars ever -->
+      <div style="position: relative; z-index: 1; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 1px; text-align: center; padding: 2px 16px;">
         
         <!-- Main Title -->
-        <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0;">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink: 0;">
           <span style="font-family: 'Fredoka', sans-serif; font-size: 22px; font-weight: 700; color: ${c.textPrimary}; text-shadow: 1px 1px 2px rgba(255,255,255,0.4);">
             Daily Challenge
           </span>
         </div>
 
         <!-- Last Week's Top 3 Award Card -->
-        <div style="flex-shrink:0;">
-          <div style="font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; color: #000000; margin-bottom: 4px; text-align: center;">
-            🏆 Last Week's Champions
+        <div style="flex-shrink: 0;">
+          
+          <!-- 1. Fixed Height Container for the Image (Change height here to make the image area bigger) -->
+          <div style="height: 80px; display: flex; align-items: center; justify-content: center; margin-bottom: 0px; flex-shrink: 0;">
+            <!-- 2. Image scales INSIDE the container (Change max-height here to grow the image) -->
+            <img src="/images/last_week_champions.png" alt="Last Week's Champions" style="max-height: 100%; max-width: 100%; width: auto; height: auto; object-fit: contain;" />
           </div>
+
+          <!-- 3. The Box holding the 3 players (Fixed size, won't be pushed down) -->
           <div id="dc-awards-card" style="
             background: url('/images/dailybox.png') no-repeat center 46%; 
-            background-size: 120% 250%; 
-            aspect-ratio: 3 / 1; 
+            background-size: 120% 300%; 
+            aspect-ratio: 4 / 1; 
             border-radius: 20px; 
-            padding: 15px; 
+            padding: 5px 15px; 
             display:flex; justify-content:space-around; align-items:center;">
             ${spinner()}
           </div>
@@ -544,68 +550,72 @@ export class Home extends Phaser.Scene {
           <!-- Left Column: Today Top 10 + Clock -->
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
             
-            <!-- Title Image -->
-            <div style="height: 40px; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; flex-shrink: 0;">
+            <!-- Title Image (Fixed slice) -->
+            <div style="flex: 0 0 35px; display: flex; align-items: center; justify-content: center; margin-bottom: 4px;">
               <img src="/images/top10.png" alt="Today Top 10" style="max-height: 100%; max-width: 100%; width: auto; height: auto;" />
             </div>
 
-            <!-- Ranking Box (Changed to a fixed height so it stays small) -->
+            <!-- Ranking Box (Gets 3 slices of the pie) -->
             <div id="daily-lb-today" style="
               background: url('/images/dailybox.png') no-repeat center center; 
               background-size: 150% 400%; 
               border-radius: 12px; 
               padding: 15px 10px; 
-              height: 300px; /* Change this number to make the box taller or shorter! */
+              flex: 3; /* CHANGE THIS NUMBER to make the list bigger/smaller relative to the clock */
               overflow-y: auto; 
-              display:flex; flex-direction:column; gap:4px; min-height: 0; flex-shrink: 0;">
+              display:flex; flex-direction:column; gap:4px; min-height: 0;">
               ${spinner()}
             </div>
 
-            <!-- Clock Countdown (Back to your big size, stacked normally) -->
+            <!-- Clock Countdown (Gets 2 slices of the pie) -->
             <div style="
-              position: relative; 
-              width: 200px; 
-              height: 180px; 
-              margin: 0px auto 0 auto; 
-              flex-shrink: 0; 
+              flex: 2; /* CHANGE THIS NUMBER to make the clock bigger/smaller relative to the list */
+              min-height: 0; 
               display: flex; align-items: center; justify-content: center; 
-              background: url('/images/clock.png') no-repeat center center; 
-              background-size: contain;">
-              <span id="daily-countdown" style="
-                font-family: ${theme.font.mono}; 
-                font-weight: 800; 
-                font-size: 25px; 
-                color: ${c.accentBright}; 
-                position: absolute; 
-                top: 61%; 
-                left: 67%; 
-                transform: translate(-50%, -50%); 
-                text-align: center; 
-                width: 100%;">
-                00:00:00
-              </span>
+              margin-top: 8px;">
+              <div style="
+                position: relative; 
+                height: 100%; 
+                aspect-ratio: 1 / 1; /* Keeps the clock perfectly circular/square */
+                max-height: 180px; /* Prevents it from getting too huge on desktop */
+                display: flex; align-items: center; justify-content: center; 
+                background: url('/images/clock.png') no-repeat center center; 
+                background-size: contain;">
+                <span id="daily-countdown" style="
+                  font-family: ${theme.font.mono}; 
+                  font-weight: 800; 
+                  font-size: 20px; 
+                  color: ${c.accentBright}; 
+                  position: absolute; 
+                  top: 61%; 
+                  left: 67%; 
+                  transform: translate(-50%, -50%); 
+                  text-align: center; 
+                  width: 100%;">
+                  00:00:00
+                </span>
+              </div>
             </div>
           </div>
 
           <!-- Right Column: This Week Top 10 -->
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
-            <!-- Title Image -->
-            <div style="height: 40px; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; flex-shrink: 0;">
+            
+            <!-- 1. IMAGE POSITION: Change margin-top to push the image down -->
+            <div style="flex: 0 0 35px; display: flex; align-items: center; justify-content: center; margin-top: 170px; margin-bottom: 4px;">
               <img src="/images/weektop10.png" alt="This Week Top 10" style="max-height: 100%; max-width: 100%; width: auto; height: auto;" />
             </div>
             
-            <!-- Ranking Box -->
+            <!-- 2. BOX SIZE & POSITION: Changed flex: 5 to a fixed height so it doesn't stretch to the top -->
             <div id="daily-lb-weekly" style="
               background: url('/images/dailybox.png') no-repeat center center; 
               background-size: 150% 400%; 
               border-radius: 12px; 
               padding: 15px 10px; 
-              flex: 1; overflow-y: auto; display:flex; flex-direction:column; gap:4px; min-height: 0;">
+              height: 300px; /* Change this to make the box taller or shorter! */
+              overflow-y: auto; display:flex; flex-direction:column; gap:4px; min-height: 0;">
               ${spinner()}
             </div>
-
-            <!-- Invisible spacer (Updated to 110px to match the left clock + margin) -->
-            <div style="height: 110px; flex-shrink: 0;"></div>
           </div>
         </div>
 
@@ -613,7 +623,7 @@ export class Home extends Phaser.Scene {
           background: ${theme.color.accent}; color: #FFFFFF; border: none; 
           border-radius: 12px; padding: 12px 0; width: 100%; max-width: 320px; 
           font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 16px; 
-          cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); margin: 0 auto; flex-shrink:0;">
+          cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); margin: 0 auto; flex-shrink: 0;">
           Start Today's Challenge
         </button>
 
@@ -659,7 +669,7 @@ export class Home extends Phaser.Scene {
       if (weeklyEntries.length === 0) {
         weeklyCard.innerHTML = `<div style="color:${c.textMuted};font-size:11px;text-align:center;padding:20px;">No scores yet.</div>`;
       } else {
-        weeklyCard.innerHTML = weeklyEntries.map((e, i) => this.renderDailyLbRow(e, i, myUserId, true)).join('');
+                weeklyCard.innerHTML = weeklyEntries.slice(0, 10).map((e, i) => this.renderDailyLbRow(e, i, myUserId, true)).join('');;
       }
     } catch (err) {
       console.error('[TypeType] daily leaderboard fetch failed', err);
