@@ -303,11 +303,9 @@ export class Home extends Phaser.Scene {
     page.innerHTML = `
       <img src="/images/bg_playground.png" alt="Playground Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
 
-      <img src="/images/bg_playground.png" alt="Playground Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
-
-      <!-- Page Title (Added here) -->
-      <div style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10;">
-        <span style="font-family: ${theme.font.display}; font-size: 28px; font-weight: 700; color: #FF6B6B; text-shadow: 2px 2px 0px rgba(0,0,0,0.2);">
+        <!-- Page Title (Added here) -->
+      <div style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 10;">
+        <span style="font-family: ${theme.font.display}; font-size: 25px; font-weight: 700; color: #FF6B6B; text-shadow: 2px 2px 0px rgba(0,0,0,0.2);">
           Friends Challenge
         </span>
       </div>
