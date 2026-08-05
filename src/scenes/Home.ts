@@ -303,6 +303,15 @@ export class Home extends Phaser.Scene {
     page.innerHTML = `
       <img src="/images/bg_playground.png" alt="Playground Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
 
+      <img src="/images/bg_playground.png" alt="Playground Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
+
+      <!-- Page Title (Added here) -->
+      <div style="position: absolute; top: 20px; left: 52%; transform: translateX(-50%); z-index: 10;">
+        <span style="font-family: ${theme.font.display}; font-size: 28px; font-weight: 700; color: #FF6B6B; text-shadow: 2px 2px 0px rgba(0,0,0,0.2);">
+          Friends Challenge
+        </span>
+      </div>
+
       <div style="position: relative; z-index: 1; display: flex; gap: 10px; flex: 1; padding: 12px; padding-bottom: 90px; box-sizing: border-box; height: 100%;">
         
         <!-- Left Column: Level Images -->
@@ -529,7 +538,7 @@ export class Home extends Phaser.Scene {
         
         <!-- Main Title -->
         <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink: 0;">
-          <span style="font-family: 'Fredoka', sans-serif; font-size: 22px; font-weight: 700; color: ${c.textPrimary}; text-shadow: 1px 1px 2px rgba(255,255,255,0.4);">
+          <span style="font-family: ${theme.font.display}; font-size: 28px; font-weight: 700; color: #FFC93C; text-shadow: 2px 2px 0px rgba(0,0,0,0.2);">
             Daily Challenge
           </span>
         </div>
@@ -613,7 +622,7 @@ export class Home extends Phaser.Scene {
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
             
             <!-- 1. IMAGE POSITION: Change margin-top to push the image down -->
-            <div style="flex: 0 0 35px; display: flex; align-items: center; justify-content: center; margin-top: 170px; margin-bottom: 4px;">
+            <div style="flex: 0 0 35px; display: flex; align-items: center; justify-content: center; margin-top: 186px; margin-bottom: 4px;">
               <img src="/images/weektop10.png" alt="This Week Top 10" style="max-height: 100%; max-width: 100%; width: auto; height: auto;" />
             </div>
             
@@ -630,13 +639,20 @@ export class Home extends Phaser.Scene {
           </div>
         </div>
 
-        <button id="btn-start-daily" style="
-          background: ${theme.color.accent}; color: #FFFFFF; border: none; 
-          border-radius: 12px; padding: 12px 0; width: 100%; max-width: 320px; 
-          font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 16px; 
-          cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); margin: 0 auto; flex-shrink: 0;">
-          Start Today's Challenge
-        </button>
+        <!-- Custom Daily Start Button Image (Absolute Positioned) -->
+        <img id="btn-start-daily" src="/images/dailystart.png" alt="Start Daily Challenge" style="
+          position: absolute; 
+          bottom: 310px; /* CHANGE THIS to move UP (e.g., 60px) or DOWN (e.g., 10px) */
+          left: 75%; /* CHANGE THIS to move LEFT (e.g., 30%) or RIGHT (e.g., 70%) */
+          transform: translateX(-50%); /* Keeps it perfectly centered on the % mark */
+          
+          width: 100%; 
+          max-width: 200px; /* CHANGE THIS number to make the button bigger or smaller! */
+          height: auto; 
+          cursor: pointer; 
+          z-index: 20; 
+          filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));" 
+        />
 
       </div>
     `;
@@ -770,7 +786,7 @@ export class Home extends Phaser.Scene {
 
   // ── Page 3: Endless ──
 
-  private renderEndlessPage(access: AccessResult, auth: AuthState) {
+    private renderEndlessPage(access: AccessResult, auth: AuthState) {
     const c = theme.color;
     const page = this.containerEl.querySelector('#page-endless') as HTMLElement;
 
@@ -790,15 +806,39 @@ export class Home extends Phaser.Scene {
       return;
     }
 
+    // Apply full-screen background and remove default padding
+    page.style.padding = '0';
+    page.style.background = 'none';
+
     page.innerHTML = `
-      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;">
-        <div style="${panel('padding:28px 22px;')}max-width:320px;display:flex;flex-direction:column;gap:10px;align-items:center;">
-          <span style="font-family:${theme.font.display};font-size:20px;font-weight:800;color:${c.textPrimary};">
+      <!-- Full-Screen Background Layer -->
+      <img src="/images/endless.png" alt="Endless Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
+
+      <!-- Main Content Layer -->
+      <div style="position: relative; z-index: 1; flex: 1; min-height: 0; overflow: hidden;">
+        
+        <!-- Page Title (Added here) -->
+        <div style="position: absolute; top: 30px; left: 50%; transform: translateX(-50%); z-index: 10;">
+          <span style="font-family: ${theme.font.display}; font-size: 28px; font-weight: 700; color: #8FD694; text-shadow: 2px 2px 0px rgba(0,0,0,0.2);">
             Endless Mode
           </span>
-          <span style="font-size:12.5px;color:${c.textMuted};">Climb Easy → Boss, then hold on as long as you can.</span>
         </div>
-        ${primaryButton('Start', 'btn-start-endless', 'max-width:320px;')}
+
+        <!-- Custom Start Button Image (Absolute Positioned for total freedom) -->
+        <img id="btn-start-endless" src="/images/endstart.png" alt="Start Endless" style="
+          position: absolute; 
+          top: 90%; /* CHANGE THIS to move UP/DOWN (e.g., 30% or 70%) */
+          left: 50%; /* CHANGE THIS to move LEFT/RIGHT (e.g., 30% or 70%) */
+          transform: translate(-50%, -50%); /* Keeps the center of the image exactly on the % mark */
+          
+          width: 100%; 
+          max-width: 100px; /* CHANGE THIS for size */
+          height: auto; 
+          cursor: pointer; 
+          z-index: 20; 
+          filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));" 
+        />
+
       </div>
     `;
 
