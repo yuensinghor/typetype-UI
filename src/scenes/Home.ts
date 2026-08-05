@@ -306,7 +306,7 @@ export class Home extends Phaser.Scene {
       <img src="/images/bg_playground.png" alt="Playground Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
 
       <!-- Page Title (Added here) -->
-      <div style="position: absolute; top: 20px; left: 52%; transform: translateX(-50%); z-index: 10;">
+      <div style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10;">
         <span style="font-family: ${theme.font.display}; font-size: 28px; font-weight: 700; color: #FF6B6B; text-shadow: 2px 2px 0px rgba(0,0,0,0.2);">
           Friends Challenge
         </span>
@@ -642,7 +642,7 @@ export class Home extends Phaser.Scene {
         <!-- Custom Daily Start Button Image (Absolute Positioned) -->
         <img id="btn-start-daily" src="/images/dailystart.png" alt="Start Daily Challenge" style="
           position: absolute; 
-          bottom: 310px; /* CHANGE THIS to move UP (e.g., 60px) or DOWN (e.g., 10px) */
+          bottom: 300px; /* CHANGE THIS to move UP (e.g., 60px) or DOWN (e.g., 10px) */
           left: 75%; /* CHANGE THIS to move LEFT (e.g., 30%) or RIGHT (e.g., 70%) */
           transform: translateX(-50%); /* Keeps it perfectly centered on the % mark */
           
