@@ -876,43 +876,37 @@ export class Home extends Phaser.Scene {
     page.innerHTML = `
       <img src="/images/profileback.png" alt="Profile Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
       
-      <div style="position: relative; z-index: 1; display: flex; flex: 1; min-height: 0; gap: 10px; padding: 10px;">
+      <div style="position: relative; z-index: 1; display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 12px; padding: 12px;">
         
-        <!-- Left Sidebar -->
-        <div style="width: 80px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
+        <!-- Top Navigation Bar -->
+        <div style="display: flex; gap: 12px; flex-shrink: 0; padding: 0 4px;">
           <button id="btn-profile-ach" style="
-            flex: 1; border-radius: 12px; 
-            border: 1px solid ${this.activeProfileTab === 'achievements' ? c.accent : c.border}; 
-            background: ${this.activeProfileTab === 'achievements' ? c.accentDim : 'transparent'}; 
-            color: ${this.activeProfileTab === 'achievements' ? c.accentBright : c.textMuted}; 
-            cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; 
-            font-size: 10px; font-weight: 700; font-family: 'Nunito', sans-serif;">
-            🏆<span>Achieve</span>
+            flex: 1; padding: 0; border: none; 
+            background: transparent; 
+            cursor: pointer; display: flex; align-items: center; justify-content: center;">
+            <img src="/images/button_achievements.png" alt="Achievements" style="width: 100%; height: auto; max-height: 150px; object-fit: contain; transition: filter 0.2s; ${this.activeProfileTab === 'achievements' ? '' : 'filter: grayscale(90%) brightness(0.6); opacity: 0.7;'}" />
           </button>
           <button id="btn-profile-friends" style="
-            flex: 1; border-radius: 12px; 
-            border: 1px solid ${this.activeProfileTab === 'friends' ? c.accent : c.border}; 
-            background: ${this.activeProfileTab === 'friends' ? c.accentDim : 'transparent'}; 
-            color: ${this.activeProfileTab === 'friends' ? c.accentBright : c.textMuted}; 
-            cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; 
-            font-size: 10px; font-weight: 700; font-family: 'Nunito', sans-serif;">
-            👥<span>Friends</span>
+            flex: 1; padding: 0; border: none; 
+            background: transparent; 
+            cursor: pointer; display: flex; align-items: center; justify-content: center;">
+            <img src="/images/button_friends.png" alt="Friends" style="width: 100%; height: auto; max-height: 150px; object-fit: contain; transition: filter 0.2s; ${this.activeProfileTab === 'friends' ? '' : 'filter: grayscale(90%) brightness(0.6); opacity: 0.7;'}" />
           </button>
         </div>
 
-        <!-- Right Content Area -->
-        <div id="profile-content" style="flex: 1; min-width: 0; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; background: transparent;">
+        <!-- Main Content Area -->
+        <div id="profile-content" style="flex: 1; min-width: 0; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; background: rgba(0,0,0,0.2); backdrop-filter: blur(4px);">
           ${spinner()}
         </div>
       </div>
     `;
 
-    // Bind Sidebar Buttons
+    // Bind Top Bar Buttons
     page.querySelector('#btn-profile-ach')?.addEventListener('click', () => {
       if (this.activeProfileTab !== 'achievements') {
         this.audio.playClick();
         this.activeProfileTab = 'achievements';
-        this.renderProfilePage(); // Re-render to update styles and content
+        this.renderProfilePage();
       }
     });
 
@@ -920,7 +914,7 @@ export class Home extends Phaser.Scene {
       if (this.activeProfileTab !== 'friends') {
         this.audio.playClick();
         this.activeProfileTab = 'friends';
-        this.renderProfilePage(); // Re-render to update styles and content
+        this.renderProfilePage();
       }
     });
 
@@ -972,15 +966,18 @@ export class Home extends Phaser.Scene {
         { id: 'flash', rule: 'Reach Rank #1 on any tier leaderboard and have at least 1 accepted friend.' }
       ];
 
-      // Build the 3x3 HTML Grid
+       // Build the 3x3 HTML Grid
       const html = `
+        <div style="padding: 12px; font-size: 16px; font-weight: 800; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); color: #fff; font-family: 'Nunito', sans-serif;">
+          Achievements
+        </div>
         <style>
           .badge-grid-3x3 {
             display: grid;
             grid-template-columns: repeat(3, 1fr); /* 3 columns */
             gap: 12px;
             padding: 16px;
-            height: 100%;
+            flex: 1;
             overflow-y: auto;
             box-sizing: border-box;
             align-content: center; /* Centers the grid vertically */

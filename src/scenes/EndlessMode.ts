@@ -584,7 +584,7 @@ export class EndlessMode extends Phaser.Scene {
 
   private showRoundResult(result: RoundResult, forceComplete: boolean) {
     this.phase = 'round_result';
-    audioManager.startMenuMusic();
+    // REMOVED: audioManager.startMenuMusic();
     const ok = result.status === 'correct';
     const timeout = result.status === 'timeout';
     const c = theme.color;
@@ -628,6 +628,7 @@ export class EndlessMode extends Phaser.Scene {
 
   private async goToComplete() {
     this.phase = 'complete';
+    audioManager.startMenuMusic(); // <-- ADD THIS (Music plays only when the whole run is over)
     const totalScore = this.results.reduce((a, r) => a + r.points, 0);
     const roundsCleared = this.results.filter(r => r.status === 'correct').length;
     const highestTierReached = tierForRound(this.round);

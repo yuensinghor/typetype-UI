@@ -89,14 +89,12 @@ export function generateEquationSeeded(rand: RandFn, tier: Tier): Equation {
 }
 
 // ── Timing (locked spec) ────────────────────────────────────────────────
-// Stages 1-5 ramp linearly from a start time down to an end time per tier.
-// Exported so levelGenerator.ts (Phase 4) can interpolate a matching
-// difficulty-scaled ramp instead of hand-tuning a second reference curve.
+// TEMPORARY CHEAT MODE (10x TIME) FOR BADGE TESTING
 export const RAMP: Record<Tier, { start: number; end: number }> = {
-  easy: { start: 2.0, end: 1.4 },
-  medium: { start: 4.0, end: 2.6 },
-  hard: { start: 6.0, end: 4.0 },
-  boss: { start: 8.0, end: 6.5 },
+  easy: { start: 2.0 * 10, end: 1.4 * 10 },
+  medium: { start: 4.0 * 10, end: 2.6 * 10 },
+  hard: { start: 6.0 * 10, end: 4.0 * 10 },
+  boss: { start: 8.0 * 10, end: 6.5 * 10 },
 };
 
 export function getTimeLimit(tier: Tier, roundIndex: number): number {
@@ -111,10 +109,10 @@ export function getTimeLimit(tier: Tier, roundIndex: number): number {
  * dynamic community-median lookup entirely — no network call needed.
  */
 export const UNLOCK_TARGETS: Record<Tier, number> = {
-  easy: 1.1,
-  medium: 1.6,
-  hard: 3.3,
-  boss: 5.5,
+  easy: 1.1 * 10,
+  medium: 1.6 * 10,
+  hard: 3.3 * 10,
+  boss: 5.5 * 10,
 };
 
 // Hidden stages 6-10: each stage tightens the previous limit by 5%.
@@ -126,8 +124,8 @@ export function getEndlessTimeLimit(tier: Tier, stageIndex: number): number {
 
 // Stage 11 (Limit Break): base * 0.95^5, precomputed.
 export const LIMIT_BREAK_LIMITS: Record<Tier, number> = {
-  easy: 0.851,
-  medium: 1.238,
-  hard: 2.553,
-  boss: 4.256,
+  easy: 0.851 * 10,
+  medium: 1.238 * 10,
+  hard: 2.553 * 10,
+  boss: 4.256 * 10,
 };

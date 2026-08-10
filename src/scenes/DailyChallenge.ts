@@ -654,7 +654,7 @@ export class DailyChallenge extends Phaser.Scene {
 
   private showStageResult(result: RoundResult, forceComplete: boolean) {
     this.phase = 'round_result';
-    audioManager.startMenuMusic();
+    // REMOVED: audioManager.startMenuMusic();
     const ok = result.status === 'correct';
     const timeout = result.status === 'timeout';
     const c = theme.color;
@@ -763,6 +763,7 @@ export class DailyChallenge extends Phaser.Scene {
 
   private async goToComplete() {
     this.phase = 'complete';
+    audioManager.startMenuMusic(); // <-- ADD THIS (Music plays only when the whole run is over)
     const totalScore = this.results.reduce((a, r) => a + r.points, 0);
     const bonusResults = this.results.slice(TOTAL_BASIC);
     const bonusStagesCleared = bonusResults.filter(r => r.status === 'correct').length;

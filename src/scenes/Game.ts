@@ -537,6 +537,7 @@ export class Game extends Phaser.Scene {
 
   private showRoundResult(result: RoundResult, state: LadderState) {
     this.phase = 'round_result';
+    // REMOVED: audioManager.startMenuMusic(); 
     const ok = result.status === 'correct';
     const timeout = result.status === 'timeout';
     const c = theme.color;
