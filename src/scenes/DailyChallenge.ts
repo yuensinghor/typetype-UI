@@ -303,7 +303,7 @@ export class DailyChallenge extends Phaser.Scene {
           this.audio.playCountdownGo();
           valueEl.textContent = 'GO';
           this.time.delayedCall(400, () => {
-            this.audio.startMusic(1);
+            this.audio.stopMusic();
             this.showPlaying();
           });
         }
@@ -654,6 +654,7 @@ export class DailyChallenge extends Phaser.Scene {
 
   private showStageResult(result: RoundResult, forceComplete: boolean) {
     this.phase = 'round_result';
+    audioManager.startMenuMusic();
     const ok = result.status === 'correct';
     const timeout = result.status === 'timeout';
     const c = theme.color;

@@ -245,7 +245,7 @@ export class EndlessMode extends Phaser.Scene {
     // player still gets a beat to look up before typing starts.
     this.audio.playCountdownGo();
     this.timerEvent = this.time.delayedCall(250, () => {
-      this.audio.startMusic(1);
+      this.audio.stopMusic();
       this.showPlaying();
     });
   }
@@ -584,6 +584,7 @@ export class EndlessMode extends Phaser.Scene {
 
   private showRoundResult(result: RoundResult, forceComplete: boolean) {
     this.phase = 'round_result';
+    audioManager.startMenuMusic();
     const ok = result.status === 'correct';
     const timeout = result.status === 'timeout';
     const c = theme.color;

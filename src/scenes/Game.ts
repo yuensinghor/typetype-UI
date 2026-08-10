@@ -104,7 +104,7 @@ export class Game extends Phaser.Scene {
     const s = this.engine.getState();
     const c = theme.color;
     const g = s.phase === 'limit_break';
-    audioManager.startMenuMusic();
+    this.audio.stopMusic();
 
     this.containerEl.innerHTML = `
       ${soundToggleHTML()}

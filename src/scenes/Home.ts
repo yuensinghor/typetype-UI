@@ -1,4 +1,4 @@
-import { renderAchievementsHTML } from '../lib/achievementUI';
+// Old achievementUI import removed - using Supabase RPC sync_user_badges now
 import { fetchDailyLeaderboard, fetchWeeklyLeaderboard, fetchLastWeekChampions, type DailyLeaderboardEntry, type WeeklyLeaderboardEntry } from '../lib/dailyChallenge';
 import { fetchDailyLeaderboard, type DailyLeaderboardEntry } from '../lib/dailyChallenge';
 import { supabase } from '../lib/supabaseClient';
@@ -871,10 +871,12 @@ export class Home extends Phaser.Scene {
     if (!page) return;
 
     page.style.padding = '0';
-    page.style.background = '#100b18'; // Dark background so the achievement badges pop
+    page.style.background = 'none';
 
     page.innerHTML = `
-      <div style="display: flex; flex: 1; min-height: 0; gap: 10px; padding: 10px;">
+      <img src="/images/profileback.png" alt="Profile Background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none;" />
+      
+      <div style="position: relative; z-index: 1; display: flex; flex: 1; min-height: 0; gap: 10px; padding: 10px;">
         
         <!-- Left Sidebar -->
         <div style="width: 80px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
@@ -899,7 +901,7 @@ export class Home extends Phaser.Scene {
         </div>
 
         <!-- Right Content Area -->
-        <div id="profile-content" style="flex: 1; min-width: 0; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; background: #100b18;">
+        <div id="profile-content" style="flex: 1; min-width: 0; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; background: transparent;">
           ${spinner()}
         </div>
       </div>
@@ -934,14 +936,161 @@ export class Home extends Phaser.Scene {
 
     if (this.activeProfileTab === 'achievements') {
       contentEl.innerHTML = spinner('Loading badges...');
-      const html = await renderAchievementsHTML(identity);
+      
+      let unlocked = new Set<string>();
+      
+      // Only fetch from Supabase if the user is logged in
+      if (identity && !identity.isGuest) {
+        try {
+          // Call the secure "Brain" function in Supabase
+          const { data, error } = await supabase.rpc('sync_user_badges', { 
+            p_user_id: identity.userId 
+          });
+          
+          if (error) {
+            console.error('[TypeType] sync_user_badges error:', error);
+          } else if (data) {
+            // data is an array of objects like [{ badge_id: 'ninja' }, ...]
+            // convert it to a Set of strings for easy lookup
+            unlocked = new Set(data.map((row: any) => row.badge_id));
+          }
+        } catch (err) {
+          console.error('[TypeType] RPC call failed:', err);
+        }
+      }
+
+      // Define your 9 badges and their unlock rules
+      const badgeData = [
+        { id: 'typemaster', rule: 'Clear all basic stages in all 4 tiers (Easy, Medium, Hard, Boss) in Friends Challenge.' },
+        { id: 'limitbreaker', rule: 'Beat your previous personal best record in any game mode.' },
+        { id: 'dailyking', rule: 'Play the Daily Challenge for 7 consecutive days.' },
+        { id: 'hiddenhunter', rule: 'Unlock a hidden bonus stage in Friends Challenge for the first time.' },
+        { id: 'bossbreaker', rule: 'Clear a full tier gauntlet: 5 basic, 5 hidden, and the Limit Break stage without failing.' },
+        { id: 'ninja', rule: 'Unlock hidden bonus stages 3 times total in Friends Challenge.' },
+        { id: 'onfire', rule: 'Reach Round 20 in Endless Mode.' },
+        { id: 'perfect', rule: 'Get a 100% accuracy run in both Friends Challenge and Daily Challenge.' },
+        { id: 'flash', rule: 'Reach Rank #1 on any tier leaderboard and have at least 1 accepted friend.' }
+      ];
+
+      // Build the 3x3 HTML Grid
+      const html = `
+        <style>
+          .badge-grid-3x3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3 columns */
+            gap: 12px;
+            padding: 16px;
+            height: 100%;
+            overflow-y: auto;
+            box-sizing: border-box;
+            align-content: center; /* Centers the grid vertically */
+          }
+          .badge-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+          }
+          .badge-img {
+            width: 100%;
+            aspect-ratio: 1 / 1; /* Keeps perfect squares */
+            object-fit: contain; 
+          }
+          .badge-locked {
+            filter: grayscale(100%) brightness(0.4); /* Greyout effect */
+            opacity: 0.6;
+          }
+          .badge-name {
+            font-family: 'Nunito', sans-serif;
+            font-size: 10px;
+            font-weight: 700;
+            color: #fff;
+            text-align: center;
+            text-transform: capitalize;
+          }
+        </style>
+        <div class="badge-grid-3x3">
+          ${badgeData.map(badge => {
+            const isUnlocked = unlocked.has(badge.id);
+            return `
+              <div class="badge-item" data-badge-id="${badge.id}" data-badge-rule="${badge.rule}" data-badge-unlocked="${isUnlocked}" style="cursor: pointer;">
+                <img src="/images/${badge.id}.png" class="badge-img ${isUnlocked ? '' : 'badge-locked'}" alt="${badge.id}" />
+                <span class="badge-name" style="opacity: ${isUnlocked ? 1 : 0.5};">
+                  ${badge.id}
+                </span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+
       // Double check user didn't switch tabs while loading
       if (this.activeProfileTab === 'achievements' && contentEl) {
         contentEl.innerHTML = html;
+        
+        // Bind click events to badges
+        contentEl.querySelectorAll('.badge-item').forEach(item => {
+          item.addEventListener('click', (e) => {
+            const el = item as HTMLElement;
+            const badgeId = el.dataset.badgeId;
+            const rule = el.dataset.badgeRule;
+            const isUnlocked = el.dataset.badgeUnlocked === 'true';
+            if (badgeId && rule) {
+              this.showBadgeInfoModal(badgeId, rule, isUnlocked);
+            }
+          });
+        });
       }
     } else {
       this.renderFriendsUI(contentEl, identity);
     }
+  }
+
+  private showBadgeInfoModal(badgeId: string, rule: string, isUnlocked: boolean) {
+    // Remove existing modal if any
+    this.containerEl.querySelector('#badge-info-modal')?.remove();
+
+    const c = theme.color;
+    const modal = document.createElement('div');
+    modal.id = 'badge-info-modal';
+    modal.style.cssText = `
+      position: absolute; 
+      inset: 0; 
+      background: rgba(0,0,0,0.7); 
+      z-index: 100; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      padding: 20px;
+      animation: fadeIn 0.15s;
+    `;
+
+    modal.innerHTML = `
+      <div style="background: ${c.bgCard}; border-radius: 12px; padding: 20px; max-width: 280px; width: 100%; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-family: 'Nunito', sans-serif;">
+        <img src="/images/${badgeId}.png" style="width: 60px; height: 60px; object-fit: contain; margin-bottom: 10px; ${isUnlocked ? '' : 'filter: grayscale(100%) brightness(0.4); opacity: 0.6;'}" alt="${badgeId}" />
+        <h3 style="margin: 0 0 8px 0; color: ${c.textPrimary}; font-size: 16px; text-transform: capitalize;">${badgeId}</h3>
+        <p style="margin: 0 0 16px 0; color: ${c.textSecondary}; font-size: 13px; line-height: 1.5;">${rule}</p>
+        <div style="font-size: 11px; font-weight: 800; color: ${isUnlocked ? '#4ADE80' : '#FFD23F'}; margin-bottom: 16px; text-transform: uppercase;">
+          ${isUnlocked ? '✓ Unlocked' : '🔒 Locked'}
+        </div>
+        <button id="btn-close-badge-info" style="background: ${theme.palette.coral}; color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 700; cursor: pointer; width: 100%; font-family: 'Nunito', sans-serif;">Got it!</button>
+      </div>
+    `;
+
+    const contentEl = this.containerEl.querySelector('#profile-content') as HTMLElement;
+    if (contentEl) {
+      contentEl.appendChild(modal);
+    }
+
+    // Bind close events
+    modal.querySelector('#btn-close-badge-info')?.addEventListener('click', () => {
+      modal.remove();
+    });
+    
+    // Close if clicking outside the box
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
   }
 
   private renderFriendsUI(contentEl: HTMLElement, identity: ReturnType<typeof getIdentity>) {
