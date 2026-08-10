@@ -1,3 +1,4 @@
+import { renderAchievementsHTML } from '../lib/achievementUI';
 import { fetchDailyLeaderboard, fetchWeeklyLeaderboard, fetchLastWeekChampions, type DailyLeaderboardEntry, type WeeklyLeaderboardEntry } from '../lib/dailyChallenge';
 import { fetchDailyLeaderboard, type DailyLeaderboardEntry } from '../lib/dailyChallenge';
 import { supabase } from '../lib/supabaseClient';
@@ -6,7 +7,7 @@ import { phaserGame, getIdentity } from '../game';
 import { platform } from '../lib/standaloneAdapter';
 import { audioManager, type AudioManager } from '../lib/audio';
 import { soundToggleHTML, bindSoundToggle } from '../lib/soundToggle';
-import { buildInviteLink, signOut } from '../lib/identity';
+import { buildInviteLink, signOut, signInWithGoogle } from '../lib/identity';
 import { theme, panel, label, logoTitle, primaryButton } from '../lib/theme';
 import { injectGlobalStyles } from '../lib/globalStyles';
 import { canAccessMode, type AuthState, type AccessResult, DAILY_CHALLENGE_DAYS_REQUIRED, ENDLESS_LEVELS_DAYS_REQUIRED } from '../lib/modeAccess';
@@ -124,7 +125,7 @@ export class Home extends Phaser.Scene {
   private onInstallReady?: () => void;
   private onAppInstalled?: () => void;
   private dailyCountdownInterval?: number;
-  private dailyCountdownInterval?: number;
+  private activeProfileTab: 'achievements' | 'friends' = 'achievements'; // <-- ADD THIS LINE
 
   constructor() {
     super('Home');
@@ -171,6 +172,12 @@ export class Home extends Phaser.Scene {
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;" id="header-icons">
           ${soundToggleHTML('btn-sound-toggle', true)}
           ${canOfferInstall() ? this.installButtonHTML() : ''}
+          
+          <!-- ADDED GOOGLE LOGIN BUTTON FOR GUESTS -->
+          <button id="btn-google-login" aria-label="Sign in" style="display:none; background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:${c.textPrimary};">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          </button>
+
           <button id="btn-logout" aria-label="Log out" style="
             display:none;background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;
             align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:${c.textPrimary};">
@@ -195,7 +202,7 @@ export class Home extends Phaser.Scene {
         <button class="home-tab ${this.activePage === 0 ? 'active' : ''}" data-tab="0" aria-label="Friends">${ICON_TAB_FRIENDS}<span>Friends</span></button>
         <button class="home-tab ${this.activePage === 1 ? 'active' : ''}" data-tab="1" aria-label="Daily">${ICON_TAB_DAILY}<span>Daily</span></button>
         <button class="home-tab ${this.activePage === 2 ? 'active' : ''}" data-tab="2" aria-label="Endless">${ICON_TAB_ENDLESS}<span>Endless</span></button>
-        <button class="home-tab ${this.activePage === 3 ? 'active' : ''}" data-tab="3" aria-label="Levels">${ICON_TAB_LEVELS}<span>Levels</span></button>
+        <button class="home-tab ${this.activePage === 3 ? 'active' : ''}" data-tab="3" aria-label="Profile">${ICON_TAB_LEVELS}<span>Profile</span></button>
       </div>
     `;
 
@@ -205,7 +212,7 @@ export class Home extends Phaser.Scene {
     this.renderChallengeCategoriesPage();
     this.renderDailyChallengePage({ allowed: false, reason: 'loading' }, this.auth);
     this.renderEndlessPage({ allowed: false, reason: 'loading' }, this.auth);
-    this.renderLevelsPage(this.auth);
+    this.renderProfilePage();
 
     this.bindShellEvents();
   }
@@ -250,6 +257,16 @@ export class Home extends Phaser.Scene {
       this.containerEl?.querySelector('#btn-install')?.remove();
     };
     window.addEventListener('appinstalled', this.onAppInstalled);
+
+    // ADDED LOGIN BUTTON LISTENER
+    this.containerEl.querySelector('#btn-google-login')?.addEventListener('click', async () => {
+      this.audio.playClick();
+      try {
+        await signInWithGoogle();
+      } catch (err) {
+        console.error('[TypeType] Google sign-in failed', err);
+      }
+    });
 
     this.containerEl.querySelector('#btn-achievements')?.addEventListener('click', () => {
       this.audio.playClick();
@@ -380,7 +397,7 @@ export class Home extends Phaser.Scene {
         const el = cardEl as HTMLElement;
         if (el.dataset.locked === '1') return;
         this.audio.playClick();
-        this.scene.start('Game', { startTier: el.dataset.tier as Tier, audio: this.audio });
+                this.scene.start('Game', { startTier: el.dataset.tier as Tier, audio: this.audio, returnTab: this.activePage });
       });
     });
 
@@ -661,7 +678,7 @@ export class Home extends Phaser.Scene {
 
     page.querySelector('#btn-start-daily')?.addEventListener('click', () => {
       this.audio.playClick();
-      this.scene.start('DailyChallenge', { audio: this.audio });
+      this.scene.start('DailyChallenge', { audio: this.audio, returnTab: this.activePage });
     });
   }
 
@@ -711,7 +728,7 @@ export class Home extends Phaser.Scene {
     const bonusBadge = !isWeekly && e.reachedBonus ? `<span style="font-size:9px;font-weight:700;color:${c.warning};margin-right:3px;">🔥${e.bonusStagesCleared}</span>` : '';
 
     return `
-      <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 6px; border-radius:6px; font-size:11px; background:${isMe ? 'rgba(0,0,0,0.1)' : 'transparent'}; font-family: 'Nunito', sans-serif;">
+      <div class="daily-lb-row" data-userid="${e.userId}" data-username="${e.username}" style="display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border-radius:6px; font-size:11px; background:${isMe ? 'rgba(0,0,0,0.1)' : 'transparent'}; font-family: 'Nunito', sans-serif; cursor: pointer;">
         <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1;">
           <span style="font-weight:800; color:${rankColor}; width:18px; flex-shrink:0;">${i + 1}</span>
           <span style="font-weight:700; color:#000000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
@@ -842,42 +859,210 @@ export class Home extends Phaser.Scene {
 
     page.querySelector('#btn-start-endless')?.addEventListener('click', () => {
       this.audio.playClick();
-      this.scene.start('EndlessMode', { audio: this.audio });
+      this.scene.start('EndlessMode', { audio: this.audio, returnTab: this.activePage });
     });
   }
 
-  // ── Page 4: Levels ──
+  // ── Page 4: Profile (Achievements & Friends) ──
 
-  private renderLevelsPage(auth: AuthState) {
+  private renderProfilePage() {
     const c = theme.color;
     const page = this.containerEl.querySelector('#page-levels') as HTMLElement;
     if (!page) return;
-    const access = canAccessMode('levels', auth);
-    const locked = access.reason === 'guest_not_allowed' || access.reason === 'locked';
 
-    if (locked) {
-      const teaser = access.reason === 'guest_not_allowed'
-        ? 'Log in to start your first stage'
-        : '100+ bite-sized stages \u2014 collect stars, unlock keypad skins';
-      page.innerHTML = renderLockedPageHTML('Levels', teaser, auth, ENDLESS_LEVELS_DAYS_REQUIRED);
-      return;
-    }
+    page.style.padding = '0';
+    page.style.background = '#100b18'; // Dark background so the achievement badges pop
 
     page.innerHTML = `
-      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;">
-        <div style="${panel('padding:28px 22px;')}max-width:320px;display:flex;flex-direction:column;gap:10px;align-items:center;">
-          <span style="font-family:${theme.font.display};font-size:20px;font-weight:800;color:${c.textPrimary};">
-            Levels
-          </span>
-          <span style="font-size:12.5px;color:${c.textMuted};">100+ bite-sized stages. Collect stars, unlock keypad skins.</span>
+      <div style="display: flex; flex: 1; min-height: 0; gap: 10px; padding: 10px;">
+        
+        <!-- Left Sidebar -->
+        <div style="width: 80px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
+          <button id="btn-profile-ach" style="
+            flex: 1; border-radius: 12px; 
+            border: 1px solid ${this.activeProfileTab === 'achievements' ? c.accent : c.border}; 
+            background: ${this.activeProfileTab === 'achievements' ? c.accentDim : 'transparent'}; 
+            color: ${this.activeProfileTab === 'achievements' ? c.accentBright : c.textMuted}; 
+            cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; 
+            font-size: 10px; font-weight: 700; font-family: 'Nunito', sans-serif;">
+            🏆<span>Achieve</span>
+          </button>
+          <button id="btn-profile-friends" style="
+            flex: 1; border-radius: 12px; 
+            border: 1px solid ${this.activeProfileTab === 'friends' ? c.accent : c.border}; 
+            background: ${this.activeProfileTab === 'friends' ? c.accentDim : 'transparent'}; 
+            color: ${this.activeProfileTab === 'friends' ? c.accentBright : c.textMuted}; 
+            cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; 
+            font-size: 10px; font-weight: 700; font-family: 'Nunito', sans-serif;">
+            👥<span>Friends</span>
+          </button>
         </div>
-        ${primaryButton('Start', 'btn-start-levels', 'max-width:320px;')}
+
+        <!-- Right Content Area -->
+        <div id="profile-content" style="flex: 1; min-width: 0; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; background: #100b18;">
+          ${spinner()}
+        </div>
       </div>
     `;
 
-    page.querySelector('#btn-start-levels')?.addEventListener('click', () => {
-      this.audio.playClick();
-      this.scene.start('Levels', { audio: this.audio });
+    // Bind Sidebar Buttons
+    page.querySelector('#btn-profile-ach')?.addEventListener('click', () => {
+      if (this.activeProfileTab !== 'achievements') {
+        this.audio.playClick();
+        this.activeProfileTab = 'achievements';
+        this.renderProfilePage(); // Re-render to update styles and content
+      }
+    });
+
+    page.querySelector('#btn-profile-friends')?.addEventListener('click', () => {
+      if (this.activeProfileTab !== 'friends') {
+        this.audio.playClick();
+        this.activeProfileTab = 'friends';
+        this.renderProfilePage(); // Re-render to update styles and content
+      }
+    });
+
+    // Load the active content
+    this.loadProfileContent();
+  }
+
+  private async loadProfileContent() {
+    const contentEl = this.containerEl?.querySelector('#profile-content') as HTMLElement;
+    if (!contentEl) return;
+
+    const identity = getIdentity();
+
+    if (this.activeProfileTab === 'achievements') {
+      contentEl.innerHTML = spinner('Loading badges...');
+      const html = await renderAchievementsHTML(identity);
+      // Double check user didn't switch tabs while loading
+      if (this.activeProfileTab === 'achievements' && contentEl) {
+        contentEl.innerHTML = html;
+      }
+    } else {
+      this.renderFriendsUI(contentEl, identity);
+    }
+  }
+
+  private renderFriendsUI(contentEl: HTMLElement, identity: ReturnType<typeof getIdentity>) {
+    const c = theme.color;
+    
+    contentEl.innerHTML = `
+      <div style="display: flex; flex-direction: column; height: 100%; color: #fff; font-family: 'Nunito', sans-serif;">
+        <div style="padding: 12px; font-size: 16px; font-weight: 800; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
+          Friends List
+        </div>
+        <div id="friends-list" style="flex: 1; overflow-y: auto; padding: 8px;">
+          ${spinner('Loading friends...')}
+        </div>
+      </div>
+    `;
+
+    this.refreshFriendsList(identity);
+  }
+
+  private async refreshFriendsList(identity: ReturnType<typeof getIdentity>) {
+    const listEl = this.containerEl?.querySelector('#friends-list') as HTMLElement;
+    if (!listEl || !identity) return;
+    
+    listEl.innerHTML = spinner('Loading friends...');
+    const myUserId = identity.userId;
+
+    // 1. Get accepted friends (invites + friendships)
+    const friendIds = new Set<string>();
+    const { data: invitees } = await supabase.from('profiles').select('user_id').eq('invited_by', myUserId);
+    if (invitees) invitees.forEach(p => friendIds.add(p.user_id));
+    if (identity.invitedBy) friendIds.add(identity.invitedBy);
+
+    const { data: f1 } = await supabase.from('friendships').select('addressee_id, status').eq('requester_id', myUserId);
+    const { data: f2 } = await supabase.from('friendships').select('requester_id, status').eq('addressee_id', myUserId);
+    
+    const pendingRequestIds = new Set<string>();
+
+    if (f1) f1.forEach(f => { if (f.status === 'accepted') friendIds.add(f.addressee_id); });
+    if (f2) {
+      f2.forEach(f => {
+        if (f.status === 'accepted') friendIds.add(f.requester_id);
+        if (f.status === 'pending') pendingRequestIds.add(f.requester_id);
+      });
+    }
+
+    // 2. Fetch profiles for both friends and pending requests
+    const allIds = [...friendIds, ...pendingRequestIds];
+    
+    if (allIds.length === 0) {
+      listEl.innerHTML = `<div style="color:${theme.color.textMuted}; text-align:center; padding:20px; font-size:13px;">No friends yet.<br>Add a player from the Daily Challenge leaderboard!</div>`;
+      return;
+    }
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('user_id, username, is_guest')
+      .in('user_id', allIds);
+
+    if (!profiles) return;
+
+    // 3. Separate into two lists
+    const pendingProfiles = profiles.filter(p => pendingRequestIds.has(p.user_id));
+    const acceptedProfiles = profiles.filter(p => friendIds.has(p.user_id));
+
+    let html = '';
+
+    // Render Pending Requests
+    if (pendingProfiles.length > 0) {
+      html += `
+        <div style="padding: 10px 8px 4px; font-size: 12px; font-weight: 800; color: ${theme.palette.yellow}; font-family: 'Nunito', sans-serif;">
+          Pending Requests (${pendingProfiles.length})
+        </div>
+      `;
+      html += pendingProfiles.map(p => `
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255, 210, 63, 0.1); border-radius: 8px; margin-bottom: 4px;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: ${theme.palette.yellow}; display: flex; align-items: center; justify-content: center; color: #2D3436; font-weight: 700;">
+            ${p.username ? p.username.charAt(0).toUpperCase() : '?'}
+          </div>
+          <div style="font-weight: 600; font-size: 14px; color: #fff; flex: 1;">${p.username}</div>
+          <button class="btn-accept-request" data-userid="${p.user_id}" style="background: ${theme.palette.coral}; border: none; border-radius: 8px; color: #fff; padding: 6px 12px; font-weight: 700; cursor: pointer; font-size: 12px;">Accept</button>
+        </div>
+      `).join('');
+    }
+
+    // Render Accepted Friends
+    html += `
+      <div style="padding: ${pendingProfiles.length > 0 ? '16px' : '10px'} 8px 4px; font-size: 12px; font-weight: 800; color: ${theme.color.textMuted}; font-family: 'Nunito', sans-serif;">
+        Your Friends (${acceptedProfiles.length})
+      </div>
+    `;
+    
+    if (acceptedProfiles.length === 0) {
+      html += `<div style="color:${theme.color.textMuted}; text-align:center; padding:20px; font-size:13px;">You haven't added any friends yet.</div>`;
+    } else {
+      html += acceptedProfiles.map(p => `
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: ${theme.palette.coral}; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700;">
+            ${p.username ? p.username.charAt(0).toUpperCase() : '?'}
+          </div>
+          <div style="font-weight: 600; font-size: 14px; color: #fff;">${p.username}</div>
+          ${p.is_guest ? '<span style="font-size: 10px; color: #888; margin-left: auto;">Guest</span>' : ''}
+        </div>
+      `).join('');
+    }
+
+    listEl.innerHTML = html;
+
+    // 4. Bind Accept Buttons
+    listEl.querySelectorAll('.btn-accept-request').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const targetId = (btn as HTMLElement).dataset.userid;
+        if (!targetId) return;
+        this.audio.playClick();
+        (btn as HTMLButtonElement).textContent = '...';
+        (btn as HTMLButtonElement).disabled = true;
+
+        await supabase.from('friendships').update({ status: 'accepted' }).eq('requester_id', targetId).eq('addressee_id', myUserId);
+        
+        // Refresh list to move them to "Friends"
+        this.refreshFriendsList(identity);
+      });
     });
   }
 
@@ -890,6 +1075,10 @@ export class Home extends Phaser.Scene {
     const logoutBtn = this.containerEl.querySelector('#btn-logout') as HTMLElement;
     if (logoutBtn) logoutBtn.style.display = this.auth.isLoggedIn ? 'flex' : 'none';
 
+    // Show Login button if Guest
+    const loginBtn = this.containerEl.querySelector('#btn-google-login') as HTMLElement;
+    if (loginBtn) loginBtn.style.display = this.auth.isLoggedIn ? 'none' : 'flex';
+
     if (this.auth.isLoggedIn && identity) {
       this.auth.unlocks = await fetchPlayerUnlocks(identity.userId);
     }
@@ -898,7 +1087,7 @@ export class Home extends Phaser.Scene {
     const endlessAccess = canAccessMode('endless', this.auth);
     this.renderDailyChallengePage(dailyAccess, this.auth);
     this.renderEndlessPage(endlessAccess, this.auth);
-    this.renderLevelsPage(this.auth);
+    this.renderProfilePage();
   }
 }
 

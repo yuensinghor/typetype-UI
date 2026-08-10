@@ -93,13 +93,15 @@ export class EndlessMode extends Phaser.Scene {
   private timerEvent?: Phaser.Time.TimerEvent;
   private onKeyDown?: (e: KeyboardEvent) => void;
   private isQuitModalOpen = false;
+  private returnTab: number = 2; // <-- ADD THIS (Defaults to Endless tab)
 
   constructor() {
     super('EndlessMode');
   }
 
-  init(data: { audio?: AudioManager }) {
+  init(data: { audio?: AudioManager, returnTab?: number }) { // <-- UPDATE THIS
     if (data?.audio) this.audio = data.audio;
+    this.returnTab = data.returnTab ?? 2; // <-- ADD THIS
     this.phase = 'landing';
     this.round = 1;
     this.results = [];
@@ -491,7 +493,7 @@ export class EndlessMode extends Phaser.Scene {
     this.timerEvent?.destroy();
     if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
     this.audio.stopMusic();
-    this.scene.start('Home');
+    this.scene.start('Home', { returnToTab: this.returnTab }); // <-- ADD returnToTab
   }
 
   // ── Input handling ───────────────────────────────────────────────────
@@ -677,7 +679,7 @@ export class EndlessMode extends Phaser.Scene {
     this.containerEl.querySelector('#btn-back')?.addEventListener('click', () => {
       this.audio.playClick();
       this.containerEl?.closest('.dd-shell')?.remove();
-      this.scene.start('Home');
+      this.scene.start('Home', { returnToTab: this.returnTab }); // <-- ADD returnToTab
     });
   }
 

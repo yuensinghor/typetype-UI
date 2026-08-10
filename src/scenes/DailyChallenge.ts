@@ -96,12 +96,16 @@ export class DailyChallenge extends Phaser.Scene {
   private timerEvent?: Phaser.Time.TimerEvent;
   private onKeyDown?: (e: KeyboardEvent) => void;
   private isQuitModalOpen = false;
+  private returnTab: number = 1; // <-- ADD THIS (Defaults to Daily tab)
 
   constructor() {
     super('DailyChallenge');
   }
 
-  init() {
+  init(data: { audio?: AudioManager, returnTab?: number }) { // <-- UPDATE THIS
+    if (data?.audio) this.audio = data.audio;
+    this.returnTab = data.returnTab ?? 1; // <-- ADD THIS
+    
     this.phase = 'loading';
     this.stage = 1;
     this.results = [];
@@ -553,8 +557,7 @@ export class DailyChallenge extends Phaser.Scene {
     this.timerEvent?.destroy();
     if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
     this.audio.stopMusic();
-    // Pass returnToTab: 1 so Home opens on the Daily tab
-    this.scene.start('Home', { returnToTab: 1 });
+    this.scene.start('Home', { returnToTab: this.returnTab }); // <-- CHANGE THIS
   }
 
   // ── Input handling ───────────────────────────────────────────────────
@@ -821,8 +824,7 @@ export class DailyChallenge extends Phaser.Scene {
     this.containerEl.querySelector('#btn-back')?.addEventListener('click', () => {
       this.audio.playClick();
       this.containerEl?.closest('.dd-shell')?.remove();
-      // Pass returnToTab: 1 so Home opens on the Daily tab
-      this.scene.start('Home', { returnToTab: 1 });
+      this.scene.start('Home', { returnToTab: this.returnTab }); // <-- CHANGE THIS
     });
   }
 
