@@ -95,6 +95,7 @@ export class Game extends Phaser.Scene {
 
   private showCountdown() {
     this.phase = 'countdown';
+    this.audio.stopMusic(); // <--- ADD THIS
     this.timerEvent?.destroy();
     if (this.onKeyDown) {
       window.removeEventListener('keydown', this.onKeyDown);
@@ -104,7 +105,6 @@ export class Game extends Phaser.Scene {
     const s = this.engine.getState();
     const c = theme.color;
     const g = s.phase === 'limit_break';
-    this.audio.stopMusic();
 
     this.containerEl.innerHTML = `
       ${soundToggleHTML()}
@@ -558,7 +558,6 @@ export class Game extends Phaser.Scene {
       btnLabel = `Round ${state.stageInTier}`;
     }
 
-    audioManager.startMenuMusic();
     this.containerEl.innerHTML = `
       ${soundToggleHTML()}
       <div style="flex:1;width:100%;padding:24px 20px;display:flex;flex-direction:column;
@@ -683,6 +682,7 @@ export class Game extends Phaser.Scene {
       badgesEarned: state.clearedTierBadges,
       hasLimitBreakAward: this.engine.hasLimitBreakAward(),
     });
+    audioManager.startMenuMusic(); // <-- ADD THIS (Music plays only when the whole run is over)
   }
 
   private quitToLobby() {

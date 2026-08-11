@@ -268,6 +268,7 @@ export class DailyChallenge extends Phaser.Scene {
 
   private showCountdown() {
     this.phase = 'countdown';
+    this.audio.stopMusic(); // <--- ADD THIS
     this.timerEvent?.destroy();
     if (this.onKeyDown) {
       window.removeEventListener('keydown', this.onKeyDown);

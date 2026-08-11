@@ -562,7 +562,7 @@ export class Home extends Phaser.Scene {
         <div style="flex-shrink: 0;">
           
           <!-- 1. Fixed Height Container for the Image (Change height here to make the image area bigger) -->
-          <div style="height: 80px; display: flex; align-items: center; justify-content: center; margin-bottom: 0px; flex-shrink: 0;">
+          <div style="height: 50px; display: flex; align-items: center; justify-content: center; margin-bottom: 0px; flex-shrink: 0;">
             <!-- 2. Image scales INSIDE the container (Change max-height here to grow the image) -->
             <img src="/images/last_week_champions.png" alt="Last Week's Champions" style="max-height: 100%; max-width: 100%; width: auto; height: auto; object-fit: contain;" />
           </div>
@@ -657,7 +657,7 @@ export class Home extends Phaser.Scene {
         <!-- Custom Daily Start Button Image (Absolute Positioned) -->
         <img id="btn-start-daily" src="/images/dailystart.png" alt="Start Daily Challenge" style="
           position: absolute; 
-          bottom: 300px; /* CHANGE THIS to move UP (e.g., 60px) or DOWN (e.g., 10px) */
+          bottom: 340px; /* CHANGE THIS to move UP (e.g., 60px) or DOWN (e.g., 10px) */
           left: 75%; /* CHANGE THIS to move LEFT (e.g., 30%) or RIGHT (e.g., 70%) */
           transform: translateX(-50%); /* Keeps it perfectly centered on the % mark */
           
