@@ -570,7 +570,7 @@ export class Game extends Phaser.Scene {
         <div style="width:100%;max-width:320px;${panel('padding:18px 18px;')}display:flex;flex-direction:column;gap:12px;margin-bottom:22px;font-size:13px;">
           ${infoRow('Equation', result.equation, c.textPrimary)}
           ${infoRow('Your answer', timeout ? '(no answer)' : (result.playerInput || '(empty)'), ok ? c.success : c.danger)}
-          ${infoRow('Time', `${result.timeTaken.toFixed(3)}s / ${result.timeLimit.toFixed(2)}s`, c.accent)}
+          ${infoRow('Time', `${result.timeTaken.toFixed(3)}s / ${result.timeLimit.toFixed(2)}s`, '#000000')}
           ${ok ? infoRow('Points', `+${result.points}`, c.success) : ''}
         </div>
 
@@ -623,7 +623,7 @@ export class Game extends Phaser.Scene {
     const c = theme.color;
     const isHidden = type === 'hidden_stages';
     const accent = isHidden ? c.warningText : c.success;
-    const headline = isHidden ? 'Bonus Stages Unlocked!' : 'Final Stage';
+    const headline = isHidden ? 'Hidden Stages Unlocked!' : 'Final Stage';
 
     const screen = document.createElement('div');
     screen.id = 'stage-unlock-screen';
@@ -634,13 +634,16 @@ export class Game extends Phaser.Scene {
 
     screen.innerHTML = `
       <div style="max-width:340px;display:flex;flex-direction:column;align-items:center;gap:14px;">
+        ${isHidden ? `
+          <img src="/images/hiddenstage.png" alt="Hidden Stage" style="width: 100%; max-width: 240px; height: auto; margin-bottom: 4px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));" />
+        ` : ''}
         <div style="font-family:${theme.font.display};font-size:22px;font-weight:800;color:${accent};">${headline}</div>
         <p style="font-size:13px;color:${c.textSecondary};line-height:1.8;margin:0;">
           ${isHidden
-            ? `You beat the target speed for ${TIER_LABELS[state.tier]}. Bonus stages 6-10 are open — one mistake ends the run, but clearing them earns a cosmetic badge.`
-            : `Bonus stages cleared. One stage remains — it's brutally fast. Good luck.`}
+            ? `RECORD BROKEN! ⚡ You smashed the ${TIER_LABELS[state.tier]} speed target! Bonus Stages 6–10 Unlocked! <br><br> Warning: One mistake ends the run. Clear them all to claim your exclusive Badge!`
+            : `Hidden stages cleared. One stage remains — it's brutally fast. Good luck.`}
         </p>
-        ${primaryButton(isHidden ? 'Start Bonus Stages' : 'Attempt Final Stage', 'btn-enter-system')}
+        ${primaryButton(isHidden ? 'Start Hidden Stages' : 'Attempt Final Stage', 'btn-enter-system')}
       </div>
     `;
 

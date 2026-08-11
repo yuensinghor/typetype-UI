@@ -183,11 +183,6 @@ export class Home extends Phaser.Scene {
             align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:${c.textPrimary};">
             ${ICON_LOGOUT}
           </button>
-          <button id="btn-achievements" aria-label="Achievements" style="
-            background:${c.bgCard};border:1px solid ${c.border};border-radius:12px;width:38px;height:38px;
-            display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:${c.textPrimary};">
-            ${ICON_TROPHY}
-          </button>
         </div>
       </div>
 
@@ -242,6 +237,7 @@ export class Home extends Phaser.Scene {
   private bindShellEvents() {
     this.bindInstallButton();
 
+
     this.onInstallReady = () => {
       if (this.containerEl?.querySelector('#btn-install')) return;
       if (!canOfferInstall()) return;
@@ -268,11 +264,6 @@ export class Home extends Phaser.Scene {
       }
     });
 
-    this.containerEl.querySelector('#btn-achievements')?.addEventListener('click', () => {
-      this.audio.playClick();
-      this.containerEl?.closest('.dd-shell')?.remove();
-      this.scene.start('Achievements', { audio: this.audio });
-    });
 
     this.containerEl.querySelector('#btn-logout')?.addEventListener('click', async () => {
       this.audio.playClick();

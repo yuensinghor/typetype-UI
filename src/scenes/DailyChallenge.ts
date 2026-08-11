@@ -681,7 +681,7 @@ export class DailyChallenge extends Phaser.Scene {
         <div style="width:100%;max-width:320px;${panel('padding:18px 18px;')}display:flex;flex-direction:column;gap:12px;margin-bottom:22px;font-size:13px;">
           ${infoRow('Equation', result.equation, c.textPrimary)}
           ${infoRow('Your answer', timeout ? '(no answer)' : (result.playerInput || '(empty)'), ok ? c.success : c.danger)}
-          ${infoRow('Time', `${result.timeTaken.toFixed(3)}s / ${result.timeLimit.toFixed(2)}s`, c.accentBright)}
+          ${infoRow('Time', `${result.timeTaken.toFixed(3)}s / ${result.timeLimit.toFixed(2)}s`, '#000000')}
           ${ok ? infoRow('Points', `+${result.points}`, c.success) : ''}
         </div>
 

@@ -53,8 +53,6 @@ export class GameOver extends Phaser.Scene {
   }
 
   create() {
-    // Phaser doesn't auto-call a method named `shutdown` — must bind explicitly
-    // (see Game.ts for the full explanation of why this matters everywhere).
     this.events.once('shutdown', this.shutdown, this);
     injectGlobalStyles();
     const shell = document.createElement('div');
@@ -137,9 +135,6 @@ export class GameOver extends Phaser.Scene {
 
     const { snapshot, unlockedTierReached, badgesEarned, hasLimitBreakAward } = this.sceneData;
 
-    // Clearing a tier unlocks the NEXT one. A failed/incomplete run only
-    // ever re-confirms the tier already unlocked (mergeHighestUnlockedTier
-    // is a no-op in that case since it never regresses).
     const unlockTarget: Tier = snapshot ? (nextTierOf(snapshot.tier) ?? snapshot.tier) : unlockedTierReached;
 
     const savedTier: Tier = this.game.registry.get('highestUnlockedTier') ?? 'easy';
@@ -150,13 +145,6 @@ export class GameOver extends Phaser.Scene {
     const savedAward = this.game.registry.get('hasLimitBreakAward') ?? false;
     const mergedAward = savedAward || hasLimitBreakAward;
 
-    // "All 4 tiers cleared" signal for the day-counter unlock chain
-    // (Daily Challenge / Endless / Levels). snapshot only exists when a
-    // tier's basic 5 stages were just cleared with 100% accuracy, so a
-    // snapshot for 'boss' specifically means Boss's basic stages are
-    // cleared — and since Boss can't be reached without clearing Easy,
-    // Medium, and Hard first, that's the exact moment all 4 are done.
-    // Never regresses: once true, stays true.
     const savedClearedBossBasic = this.game.registry.get('clearedBossBasic') ?? false;
     const mergedClearedBossBasic = savedClearedBossBasic || snapshot?.tier === 'boss';
 
@@ -173,22 +161,11 @@ export class GameOver extends Phaser.Scene {
     });
   }
 
-  // ── Install prompt: first-ever completed run only ──────────────────────
-
-  /**
-   * Shown at most once per player, ever — win or lose, whichever run
-   * happens to be their first. Not tied to clearing a tier: the moment
-   * someone finishes their very first full run (5 rounds) is when they've
-   * seen enough of the game to judge whether they want it installed, and
-   * we don't want to nag them again on every future GameOver screen.
-   */
   private maybeOfferInstallOnFirstPlay() {
     if (hasSeenInstallPrompt()) return;
     markInstallPromptSeen();
     if (!canOfferInstall()) return;
 
-    // Small delay so it doesn't collide with the victory sound/entrance
-    // animation — let the player register their result first.
     this.time.delayedCall(700, () => this.showFirstPlayInstallModal());
   }
 
@@ -235,60 +212,82 @@ export class GameOver extends Phaser.Scene {
     });
   }
 
-  // ── UI: genuine level clear ───────────────────────────────────────────
-
   private buildClearedUI(snapshot: ClearedTierSnapshot) {
     const c = theme.color;
     const { badgesEarned, hasLimitBreakAward } = this.sceneData;
     const avgTime = snapshot.totalTimeMs / 5 / 1000;
+    const isGuest = !getIdentity() || getIdentity()?.isGuest;
 
-    this.containerEl.style.cssText += `padding:20px 16px calc(16px + env(safe-area-inset-bottom,0px));
-      display:flex;flex-direction:column;gap:14px;font-family:${theme.font.body};color:${c.textPrimary};`;
+    this.containerEl.style.cssText += `position: relative; overflow: hidden; padding: 20px 16px calc(16px + env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column; gap:12px; font-family:${theme.font.body}; color:${c.textPrimary};`;
 
     this.containerEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <h1 style="font-family:${theme.font.display};font-size:20px;font-weight:800;margin:0;">TypeType</h1>
-        <div style="display:flex;align-items:center;gap:10px;">
-          ${label(hasLimitBreakAward ? 'Limit Break Cleared' : `Level ${TIER_NUMBER[snapshot.tier]} Cleared`, hasLimitBreakAward ? c.success : c.accentBright)}
-          ${soundToggleHTML('btn-sound-toggle', true)}
+      <!-- Mascot Character (Top Left) -->
+      <img src="/images/mascot.png" style="position: absolute; top: 0; left: 50px; width: 90px; height: auto; z-index: 20; pointer-events: none;" />
+
+      <!-- Header -->
+      <div style="text-align: center; flex-shrink: 0; margin-top: 20px; padding-left: 60px;">
+        <div style="font-family: ${theme.font.display}; font-size: 26px; font-weight: 800; color: ${theme.palette.coral}; text-shadow: 2px 2px 0px rgba(0,0,0,0.1); line-height: 1.1;">
+          Level ${TIER_LABELS[snapshot.tier]} Cleared!
         </div>
       </div>
 
-      <div style="${panel('padding:20px 18px;')}display:flex;flex-direction:column;gap:14px;text-align:center;">
-        <div style="font-family:${theme.font.display};font-size:15px;font-weight:700;color:${c.textSecondary};">
-          Nice work!
-        </div>
-        <div style="font-family:${theme.font.display};font-size:30px;font-weight:800;color:${c.textPrimary};">
-          ${TIER_LABELS[snapshot.tier]}${badgesEarned.size ? ' · 🏅' : ''}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
-          ${statCard('Score', String(snapshot.score), c.textPrimary)}
-          ${statCard('Avg Time', `${avgTime.toFixed(2)}s`, c.accentBright)}
-          ${statCard('Accuracy', '100%', c.success)}
+      <!-- Stats Row (CSS 3D Style) -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex-shrink: 0; margin-top: 4px;">
+        ${statBlock('icon_score.png', 'SCORE', String(snapshot.score))}
+        ${statBlock('icon_time.png', 'AVG TIME', `${avgTime.toFixed(2)}s`)}
+        ${statBlock('icon_accuracy.png', 'ACCURACY', '100%')}
+      </div>
+
+      <!-- Leaderboard Panel (CSS Background Image) -->
+      <div style="flex: 1; min-height: 200px; margin-bottom: 1px; border-radius: 12px; background-image: url('/images/panel_leaderboard.png'); background-size: 100% 100%; background-repeat: no-repeat; background-position: center; display: flex; flex-direction: column;">
+        <div style="padding: 140px 16px 24px 16px; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+            <div id="lb-card" style="flex: 1; overflow-y: hidden; display: flex; flex-direction: column; justify-content: center; gap: 0px;">
+            ${spinner('Submitting your score…')}
+          </div>
         </div>
       </div>
 
-      ${hasLimitBreakAward ? `
-        <div style="text-align:center;padding:12px 16px;${panel('')}color:${c.success};font-size:12px;font-weight:700;">
-          ⚡ Special name styling unlocked on the leaderboard
-        </div>` : ''}
-
-      <div>
-        <div style="margin-bottom:8px;">${label('Leaderboard', c.textSecondary)}</div>
-        <div id="lb-card" style="${panel('padding:14px;min-height:100px;')}">
-          ${spinner('Submitting your score…')}
+      <!-- Buttons -->
+      <div style="display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;">
+        ${isGuest ? `
+          <button id="btn-guest-google-signin" style="background: none; border: none; padding: 0; cursor: pointer; display: block;">
+            <img src="/images/btn_google_signin.png" style="width: 100%; height: auto; display: block;" />
+          </button>
+        ` : ''}
+        
+        <!-- Share & Invite Side-by-Side -->
+        <div style="display: flex; gap: 8px;">
+          <button id="btn-share" style="background: none; border: none; padding: 0; cursor: pointer; display: block; flex: 1;">
+            <img src="/images/btn_share.png" style="width: 100%; height: auto; display: block;" />
+          </button>
+          <button id="btn-invite" style="background: none; border: none; padding: 0; cursor: pointer; display: block; flex: 1;">
+            <img src="/images/btn_invite1.png" style="width: 100%; height: auto; display: block;" />
+          </button>
         </div>
+
+        <!-- Menu & Play Again Side-by-Side (Moved Up) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <button id="btn-lobby" style="background: none; border: none; padding: 0; cursor: pointer; display: block;">
+            <img src="/images/btn_menu.png" style="width: 100%; height: auto; display: block;" />
+          </button>
+          <button id="btn-replay" style="background: none; border: none; padding: 0; cursor: pointer; display: block;">
+            <img src="/images/btn_play_again.png" style="width: 100%; height: auto; display: block;" />
+          </button>
+        </div>
+
+        ${nextTierOf(snapshot.tier) ? `
+        <!-- Next Level (Moved to Bottom & Made Slimmer) -->
+        <button id="btn-next-level" style="background: none; border: none; padding: 0; cursor: pointer; position: relative; display: block; width: 100%; height: 44px;">
+          <img src="/images/btn_next_level_bg.png" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; border-radius: 8px;" />
+          <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; font-family: ${theme.font.display}; font-size: 20px; font-weight: 800; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); white-space: nowrap;">
+            NEXT LEVEL: ${TIER_LABELS[nextTierOf(snapshot.tier)!].toUpperCase()}
+          </span>
+        </button>
+        ` : ''}
       </div>
-
-      ${secondaryButton('📤 Share This Result', 'btn-share')}
-
-      ${nextTierOf(snapshot.tier) ? primaryButton(`Next Level: ${TIER_LABELS[nextTierOf(snapshot.tier)!]}`, 'btn-next-level') : ''}
-
-      ${this.footerHTML()}
     `;
 
     this.bindFooterEvents(this.sceneData.unlockedTierReached);
-    bindSoundToggle(this.containerEl);
 
     this.containerEl.querySelector('#btn-share')?.addEventListener('click', () => {
       this.audio.playClick();
@@ -373,8 +372,6 @@ export class GameOver extends Phaser.Scene {
         Couldn't create the share image. Try again in a moment.</div>`;
     }
   }
-
-  // ── UI: run ended before clearing anything ───────────────────────────
 
   private buildNoClearUI() {
     const c = theme.color;
@@ -480,9 +477,6 @@ export class GameOver extends Phaser.Scene {
 
     this.containerEl.querySelector('#btn-replay')?.addEventListener('click', () => {
       this.audio.playClick();
-      // Replay the exact level this run started with — not the player's
-      // permanent highest unlock. This was the bug: Easy attempts bouncing
-      // to Medium on retry because this read the wrong source.
       this.scene.start('Game', { startTier: this.sceneData.startTier, audio: this.audio });
     });
 
@@ -502,8 +496,6 @@ export class GameOver extends Phaser.Scene {
       }
     });
   }
-
-  // ── Submission ─────────────────────────────────────────────────────
 
   private async submitAndRefresh(snapshot: ClearedTierSnapshot) {
     const identity = getIdentity();
@@ -527,14 +519,11 @@ export class GameOver extends Phaser.Scene {
       createdAt: new Date().toISOString(),
     });
 
-    // --- NEW: Check for badges instantly ---
     await this.checkAndShowAchievements();
 
     this.refreshLeaderboard(entries);
   }
 
-  /** Imperfect-but-completed runs still submit — score alone (0 for missed
-   *  rounds) keeps them ranked below any genuine clear, no hard gate needed. */
   private async submitPartialAndRefresh() {
     const identity = getIdentity();
     if (!identity) return;
@@ -557,7 +546,6 @@ export class GameOver extends Phaser.Scene {
       createdAt: new Date().toISOString(),
     });
 
-    // --- NEW: Check for badges instantly ---
     await this.checkAndShowAchievements();
 
     this.refreshLeaderboard(entries);
@@ -573,9 +561,11 @@ export class GameOver extends Phaser.Scene {
       return;
     }
 
+    const top6 = entries.slice(0, 10);
+
     card.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;">
-        ${entries.map((e, i) => lbRow(e, i, username)).join('')}
+      <div style="display:flex;flex-direction:column;gap:6px;justify-content: flex-start; height: 100%;">
+        ${top6.map((e, i) => lbRow(e, i, username)).join('')}
       </div>`;
   }
 }
@@ -600,30 +590,53 @@ function spinner(msg = 'Loading…') {
 function lbRow(e: LadderEntry, i: number, myUsername: string) {
   const c = theme.color;
   const isMe = e.username.toLowerCase() === myUsername.toLowerCase();
-  const rankColor = i === 0 ? c.warning : i === 1 ? c.textSecondary : i === 2 ? '#B5824A' : c.textMuted;
+  const rankColor = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#FFFFFF99';
 
   let badgeHtml = '';
   if (e.clearedHiddenBonusTiers?.length) {
-    badgeHtml = `<span style="font-size:10px;font-weight:700;color:${c.warning};margin-right:5px;">🏅×${e.clearedHiddenBonusTiers.length}</span>`;
+    badgeHtml = `<span style="font-size:11px;font-weight:700;color:${c.warning};">🏅</span>`;
   }
   if (e.hasLimitBreakAward) {
-    badgeHtml += `<span style="font-size:10px;font-weight:700;color:${c.success};margin-right:5px;">⚡</span>`;
+    badgeHtml += `<span style="font-size:11px;font-weight:700;color:${c.success};">⚡</span>`;
   }
 
   return `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:10px;font-size:12px;
-      background:${isMe ? theme.color.accentDim : 'transparent'};">
-      <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
-        <span style="font-weight:700;color:${rankColor};width:20px;flex-shrink:0;">#${i + 1}</span>
-        <div style="display:flex;align-items:center;gap:3px;min-width:0;overflow:hidden;">
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                background: ${isMe ? 'rgba(255, 255, 255, 0.2)' : 'transparent'};
+                border: none;
+                border-radius: 14px;
+                padding: 6px 14px;
+                font-size: 14px;">
+      
+      <div style="display:flex;align-items:center;min-width:0;flex:1;gap:8px;">
+        <span style="font-weight:800;color:${rankColor};width:24px;flex-shrink:0;text-align:left;">#${i + 1}</span>
+        
+        <div style="width: 24px; flex-shrink: 0; display: flex; align-items: center; gap: 3px;">
           ${badgeHtml}
-          <span style="font-weight:700;color:${e.hasLimitBreakAward ? c.success : c.textPrimary};
-            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.username}</span>
         </div>
+        
+        <span style="font-weight:700;color:${e.hasLimitBreakAward ? c.success : '#FFFFFF'};
+                     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.username}</span>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-        <span style="color:${c.textPrimary};font-weight:700;font-family:${theme.font.mono};">${(e.bestTotalTimeMs / 1000).toFixed(3)}s</span>
-        <span style="color:${c.textMuted};font-size:10px;">(${e.score}pts)</span>
+
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;padding-left:10px;">
+        <span style="color:#FFFFFF;font-weight:700;font-family:${theme.font.mono};">${(e.bestTotalTimeMs / 1000).toFixed(3)}s</span>
+        <span style="color:#FFFFFF99;font-size:11px;">(${e.score}pts)</span>
+      </div>
+    </div>`;
+}
+
+function statBlock(icon: string, label: string, value: string) {
+  return `
+    <div style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 20px; 
+                background: linear-gradient(180deg, #6B4FBB 0%, #4A3485 100%); 
+                padding: 10px 8px; border-radius: 12px; 
+                border: 2px solid #3D2B6B; 
+                box-shadow: 0 4px 0 rgba(0,0,0,0.2);">
+      <img src="/images/${icon}" style="width: 28px; height: 28px; object-fit: contain; flex-shrink: 0;" />
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div style="font-size: 10px; font-weight: 700; color: #D1C5FF; letter-spacing: 1px;">${label}</div>
+        <div style="font-family: ${theme.font.display}; font-size: 24px; font-weight: 800; color: #FFFFFF; line-height: 1;">${value}</div>
       </div>
     </div>`;
 }
