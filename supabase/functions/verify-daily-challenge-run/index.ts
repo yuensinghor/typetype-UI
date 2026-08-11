@@ -58,6 +58,13 @@ const MAX_ROUNDS = 500; // sanity cap — no legitimate run gets remotely close 
 // skill assessment. Matches verify-daily-challenge-run's floor exactly.
 const MIN_SECONDS_PER_CHAR = 0.05;
 
+// --- NEW: CORS Headers to allow the browser to talk to this function ---
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 // ── mulberry32 — ported from src/lib/prng.ts. Must stay byte-for-byte
 // identical to the client's copy, or seeds stop reproducing the same
 // sequence and every legitimate run would fail verification. ──────────────
@@ -125,11 +132,12 @@ function tierForRound(round: number): Tier {
   return 'boss';
 }
 
+// TEMPORARY CHEAT MODE (10x TIME) FOR BADGE TESTING
 const RAMP: Record<Tier, { start: number; end: number }> = {
-  easy: { start: 2.0, end: 1.4 },
-  medium: { start: 4.0, end: 2.6 },
-  hard: { start: 6.0, end: 4.0 },
-  boss: { start: 8.0, end: 6.5 },
+  easy: { start: 2.0 * 10, end: 1.4 * 10 },
+  medium: { start: 4.0 * 10, end: 2.6 * 10 },
+  hard: { start: 6.0 * 10, end: 4.0 * 10 },
+  boss: { start: 8.0 * 10, end: 6.5 * 10 },
 };
 
 function getTimeLimit(tier: Tier, roundIndexInTier: number): number {
@@ -151,16 +159,27 @@ function pointsForRound(isCorrect: boolean, clampedTimeTaken: number, timeLimit:
 }
 
 Deno.serve(async (req: Request) => {
+  // --- NEW: Handle CORS preflight request ---
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     if (req.method !== 'POST') {
-      return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+      return new Response(JSON.stringify({ error: 'Method not allowed' }), { 
+        status: 405, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
     const body = (await req.json()) as VerifyRequestBody;
     const { userId, seed, results } = body;
 
     if (!userId || !Number.isFinite(seed) || !Array.isArray(results)) {
-      return new Response(JSON.stringify({ error: 'Missing or invalid fields' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Missing or invalid fields' }), { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
     const supabase = createClient(
@@ -235,13 +254,13 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ verifiedTotalScore: totalScore, roundsCleared, highestTierReached }),
-      { headers: { 'Content-Type': 'application/json' } },
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err) {
     console.error('[verify-endless-run] error:', err);
     return new Response(JSON.stringify({ error: 'Failed to verify run' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });

@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabaseClient';
 import Phaser from 'phaser';
 import { getTimeLimit, generateEquationSeeded } from '../lib/equation';
 import { mulberry32, type RandFn } from '../lib/prng';
@@ -636,13 +637,36 @@ export class EndlessMode extends Phaser.Scene {
 
     const identity = getIdentity();
     if (identity && !identity.isGuest) {
-      submitEndlessRun(identity.userId, {
-        seed: this.seed,
-        results: this.results,
-        totalScore,
-        roundsCleared,
-        highestTierReached,
-      }).catch(err => console.error('[TypeType] submitEndlessRun error:', err));
+      try {
+        await submitEndlessRun(identity.userId, {
+          seed: this.seed,
+          results: this.results,
+          totalScore,
+          roundsCleared,
+          highestTierReached,
+        });
+
+        // --- NEW: Check for badges instantly ---
+        const { data } = await supabase.rpc('sync_user_badges', { p_user_id: identity.userId });
+        if (data) {
+          const earned = data.map((b: any) => b.badge_id);
+          const oldBadgesStr = localStorage.getItem('dd_earned_badges') || '[]';
+          const oldBadges: string[] = JSON.parse(oldBadgesStr);
+          const newOnes = earned.filter((b: string) => !oldBadges.includes(b));
+          localStorage.setItem('dd_earned_badges', JSON.stringify(earned));
+
+          if (newOnes.length > 0) {
+            const c = theme.color;
+            const popup = document.createElement('div');
+            popup.style.cssText = `position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: ${c.bgCard}; padding: 20px 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 2000; text-align: center; animation: popIn 0.3s; border: 2px solid ${c.accent}; width: 220px; box-sizing: border-box;`;
+            popup.innerHTML = `<div style="font-size: 11px; font-weight: 800; color: ${c.accentBright}; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Achievement Unlocked!</div><img src="/images/${newOnes[0]}.png" style="width: 60px; height: 60px; object-fit: contain; margin-bottom: 8px;" alt="${newOnes[0]}" /><div style="font-family: ${theme.font.display}; font-size: 16px; font-weight: 800; color: ${c.textPrimary}; text-transform: capitalize;">${newOnes[0]}</div>`;
+            document.body.appendChild(popup);
+            setTimeout(() => { popup.style.transition = 'opacity 0.5s, transform 0.5s'; popup.style.opacity = '0'; popup.style.transform = 'translateX(-50%) translateY(-20px)'; setTimeout(() => popup.remove(), 500); }, 3500);
+          }
+        }
+      } catch (err) {
+        console.error('[TypeType] submitEndlessRun error:', err);
+      }
     }
 
     const c = theme.color;

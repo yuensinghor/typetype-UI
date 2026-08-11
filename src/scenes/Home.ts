@@ -946,7 +946,9 @@ export class Home extends Phaser.Scene {
           } else if (data) {
             // data is an array of objects like [{ badge_id: 'ninja' }, ...]
             // convert it to a Set of strings for easy lookup
-            unlocked = new Set(data.map((row: any) => row.badge_id));
+                        unlocked = new Set(data.map((row: any) => row.badge_id));
+            // Sync to localStorage so popups don't trigger for old badges
+            localStorage.setItem('dd_earned_badges', JSON.stringify(Array.from(unlocked)));
           }
         } catch (err) {
           console.error('[TypeType] RPC call failed:', err);

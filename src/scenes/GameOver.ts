@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabaseClient';
 import Phaser from 'phaser';
 import { platform } from '../lib/standaloneAdapter';
 import { getIdentity } from '../game';
@@ -78,6 +79,56 @@ export class GameOver extends Phaser.Scene {
 
   shutdown() {
     this.containerEl?.closest('.dd-shell')?.remove();
+  }
+
+  private async checkAndShowAchievements() {
+    const identity = getIdentity();
+    if (!identity || identity.isGuest) return;
+
+    try {
+      const { data } = await supabase.rpc('sync_user_badges', { p_user_id: identity.userId });
+      if (!data) return;
+
+      const earned = data.map((b: any) => b.badge_id);
+      const oldBadgesStr = localStorage.getItem('dd_earned_badges') || '[]';
+      const oldBadges: string[] = JSON.parse(oldBadgesStr);
+      
+      const newOnes = earned.filter((b: string) => !oldBadges.includes(b));
+      localStorage.setItem('dd_earned_badges', JSON.stringify(earned));
+
+      if (newOnes.length > 0) {
+        this.showAchievementPopup(newOnes[0]);
+      }
+    } catch (err) {
+      console.error('[TypeType] Ach check failed', err);
+    }
+  }
+
+  private showAchievementPopup(badgeId: string) {
+    const c = theme.color;
+    const popup = document.createElement('div');
+    popup.id = 'ach-popup';
+    popup.style.cssText = `
+      position: fixed; top: 20%; left: 50%; transform: translateX(-50%); 
+      background: ${c.bgCard}; padding: 20px 30px; border-radius: 12px; 
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 2000; text-align: center; 
+      animation: popIn 0.3s; border: 2px solid ${c.accent}; width: 220px; box-sizing: border-box;
+    `;
+    
+    popup.innerHTML = `
+      <div style="font-size: 11px; font-weight: 800; color: ${c.accentBright}; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Achievement Unlocked!</div>
+      <img src="/images/${badgeId}.png" style="width: 60px; height: 60px; object-fit: contain; margin-bottom: 8px;" alt="${badgeId}" />
+      <div style="font-family: ${theme.font.display}; font-size: 16px; font-weight: 800; color: ${c.textPrimary}; text-transform: capitalize;">${badgeId}</div>
+    `;
+    
+    document.body.appendChild(popup);
+    
+    setTimeout(() => {
+      popup.style.transition = 'opacity 0.5s, transform 0.5s';
+      popup.style.opacity = '0';
+      popup.style.transform = 'translateX(-50%) translateY(-20px)';
+      setTimeout(() => popup.remove(), 500);
+    }, 3500);
   }
 
   private persistUnlockProgress() {
@@ -476,6 +527,9 @@ export class GameOver extends Phaser.Scene {
       createdAt: new Date().toISOString(),
     });
 
+    // --- NEW: Check for badges instantly ---
+    await this.checkAndShowAchievements();
+
     this.refreshLeaderboard(entries);
   }
 
@@ -502,6 +556,9 @@ export class GameOver extends Phaser.Scene {
       clearedLimitBreak: false,
       createdAt: new Date().toISOString(),
     });
+
+    // --- NEW: Check for badges instantly ---
+    await this.checkAndShowAchievements();
 
     this.refreshLeaderboard(entries);
   }
